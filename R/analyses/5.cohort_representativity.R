@@ -1,21 +1,20 @@
+##################################################
+## EVALUATION OF THE REPRESENTATIVITY OF THE 
+## COHORT
+##################################################
 library(tidyverse) 
 library(readxl)
-library(cowplot)
 library(haven)
 library(RColorBrewer)
-library(geofacet)
 library(ggpubr)
 rm(list = ls())
 
 load("data/cohort_final.rda")
 load("data/metadata_beds.rda")
 load("data/metadata_admin_espic.rda")
-load("data/my_regional_grid.rda")
-load("data/dict_regions.rda")
-load("data/chu_finess_juridique.rda")
-load("data/france.rda")
+source("R/helper/dictionaries.R")
 
-# Loaddata/metadata_beds.rda# Load data on finess hospital by region in 2020
+# Load data on finess hospital by region in 2020
 # Data found on ATIH website: https://www.scansante.fr/applications/analyse-activite-regionale
 region_finess_all = data.frame() 
 for (f in list.files("data-raw/atih/Hospital_activity_2020/", full.names = T)) {
@@ -67,106 +66,6 @@ for (f in list.files("data-raw/atih/Hospital_activity_2020/", full.names = T)) {
   region_finess_all = bind_rows(region_finess_all, region_finess)
   rm(region_finess)
 }
-
-################################################################################
-# Hospital type distribution by regions in hospital cohort
-################################################################################
-# List of University hospitals 
-all_chu = read_excel("data-raw/communes/commune_chu.xlsx") %>%
-  filter(!main_city_name %in% c("Basse-Terre", "Fort-de-France", "Saint-Denis")) %>%
-  mutate(main_city_name = ifelse(main_city_name %in% c("Paris", "Marseille", "Lyon"), paste0(main_city_name, " 01"), main_city_name))
-
-# GPS coordinates of French cities
-gps_cities = read.csv("data-raw/communes/communes-departement-region.csv") %>%
-  dplyr::select(latitude, longitude, nom_commune) %>%
-  inner_join(., all_chu, by = c("nom_commune" = "main_city_name")) %>%
-  distinct() %>%
-  arrange(nom_commune) %>%
-  mutate(nom_commune = gsub(" 01", "", nom_commune))
-
-# CHUs in SPARES
-chu_spares = bind_rows(
-  read_excel("data-raw/spares/2019/SPARES_2019_BMRCovid.xlsx", sheet = "ADM") %>%
-    rename(code = IdEtablissement, type = groupe, name = etablissement, city = ville, region = `Nouvelle-Region`), 
-  read_excel("data-raw/spares/2020/BMR_Covid_2020.xlsx", sheet = "ADM") %>%
-    rename(code = idetablissement, name = etablissement, city = ville, type = groupe, region = `Nouvelle_Region`),
-  read_excel("data-raw/spares/2021/BMR_Covid_2021.xlsx", sheet = "ADM") %>%
-    rename(code = idetablissement, name = etablissement, city = ville, type = groupe, region = `Nouvelle_Region`),
-  read_excel("data-raw/spares/2022/BMR_Covid_2022.xlsx", sheet = "ADM") %>%
-    rename(code = idetablissement, name = etablissement, city = ville, type = groupe, region = `Nouvelle_Region`)
-) %>%
-  filter(type == "CHU", code %in% cohort_final) %>%
-  mutate(finess_juridique = ifelse(finess == "420784878", "420784878", finess_juridique),
-         finess = case_when(finess_juridique == "630780989" ~ "630000404", 
-                            finess_juridique == "690781810" ~ "690781810",
-                            .default = finess),
-         name = case_when(code == 7115 ~ "CHU G. MONTPIED", 
-                       code == 9263 ~ "CHU GRENOBLE-HOPITAL NORD",
-                       .default = name),
-         reporting = ifelse(finess != finess_juridique, "Physical", "Legal"),
-         city = case_when(
-           city == "CLERMONT FERRAND" ~ "Clermont-Ferrand",
-           city == "ST ETIENNE" ~ "Saint-Étienne",
-           city == "NIMES" ~ "Nîmes",
-           city == "ORLEANS" ~ "Orléans",
-           .default = stringr::str_to_title(city)
-         )) %>%
-  distinct()
-
-chu_inclusion = chu_spares %>%
-  group_by(finess_juridique, city, reporting) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  mutate(db = "Included") %>%
-  full_join(., gps_cities, by = c("city" = "nom_commune", "finess_juridique" = "finess_jur")) %>%
-  mutate(n = ifelse(is.na(n), 0, n), 
-         db = ifelse(is.na(db), "Not included", db), 
-         reporting = factor(ifelse(is.na(reporting), "NA", reporting), c("Legal", 'Physical', "NA"))) %>%
-  st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) 
-
-chu_inclusion_n = chu_spares %>%
-  filter(reporting == "Physical") %>%
-  group_by(city, finess_juridique, reporting) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  left_join(., gps_cities, by = c("city" = "nom_commune", "finess_juridique" = "finess_jur")) %>%
-  mutate(latitude = latitude + 0.45) %>%
-  st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) 
-
-# Distribution of university hospitals 
-p1 = ggplot(data = chu_inclusion) +
-  geom_sf(data = france, fill = "#FFFFFF00") +
-  scale_color_manual(values = c("Included" = "orchid1", "Not included" = "grey50")) +
-  geom_sf(aes(col = db, shape = reporting), size = 2) +
-  geom_sf_label(data = chu_inclusion_n, aes(label = n), size = 3) +
-  theme_minimal() +
-  theme(legend.box = 'vertical', plot.title = element_text(hjust = 0.5)) +
-  labs(col = "Hospital cohort", shape = "Reporting entity", x = "Longitude", y = "Latitude")
-
-# Distribution by region and type
-p2=metadata_admin_espic %>% 
-  filter(code %in% cohort_final) %>%
-  mutate(type = ifelse(type == "ESPIC", "Private not-for-profit hospital", type),
-         code = ifelse(type == "University hospital" & city == "MARSEILLE", 11048, code),
-         region = recode(region, !!!dict_regions)) %>%
-  dplyr::select(code, type, region) %>%
-  distinct() %>%
-  group_by(region, type) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  group_by(region) %>%
-  mutate(p = n/sum(n)) %>%
-  ungroup() %>%
-  ggplot(., aes(y = p, fill = type, x = type)) +
-  geom_bar(stat = "identity") +
-  geom_text(aes(y = p+0.05, label=n)) +
-  facet_wrap(facets = vars(region)) +
-  theme_bw() +
-  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_manual(values = brewer.pal(n = 6, name = "Dark2")) +
-  labs(x = "", y = "Proportion (in %)", fill = "")
-
-# Final figure 
-p = ggarrange(p1, p2, labels = c("A", "B"), nrow = 2, heights = c(0.8, 1))
-p
-ggsave("../Paper/Supplementary/cohort_description.png", p, height = 8, width = 7)
 
 ################################################################################
 # Hospital activity representativity in 2020 - MCO and SSR
@@ -303,10 +202,10 @@ beds = left_join(spares_ssr, spares_mco, by = c("region")) %>%
   mutate(Counts_Cohort = bed_ssr_spares + bed_mco_spares, Counts_ATIH = bed_mco_atih + bed_ssr_atih) %>%
   mutate(Distribution_Cohort = Counts_Cohort / sum(Counts_Cohort), Distribution_ATIH = Counts_ATIH / sum(Counts_ATIH))
 
-chisq.test(x=beds$Counts_Cohort, p=beds$Distribution_Cohort)
+chisq.test(x=beds$Counts_Cohort, p=beds$Distribution_ATIH)
 
 # Plot counts and distributions
-p2=beds %>%
+p1=beds %>%
   dplyr::select(region, Counts_Cohort, Counts_ATIH, Distribution_Cohort, Distribution_ATIH) %>%
   pivot_longer(-region, names_to = "param", values_to = "value") %>%
   separate(param, into = c("param", "db"), sep = "_") %>%
@@ -318,8 +217,6 @@ p2=beds %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   labs(fill = "", x = "", y = "Bed-days in 2020")
-ggsave("plots/selected_hospitals/representativity_hospital_activity.png", 
-       p2, height = 7, width = 10)
 
 ################################################################################
 # Hospital counts representativity
@@ -413,7 +310,7 @@ spares_nb = metadata_admin_espic %>%
   summarise(Counts_Cohort = n(), .groups = "drop")
 
 # Plot distributions
-p3 = left_join(spares_nb, atih_nb, by = "region") %>%
+p2 = left_join(spares_nb, atih_nb, by = "region") %>%
   mutate(Distribution_Cohort = Counts_Cohort / sum(Counts_Cohort), 
          Distribution_ATIH = Counts_ATIH / sum(Counts_ATIH),
          region = recode(region, !!!dict_regions)) %>%
@@ -425,9 +322,7 @@ p3 = left_join(spares_nb, atih_nb, by = "region") %>%
   theme_bw() +
   scale_fill_manual(values = c("Cohort" = "coral", "ATIH" = "darkorchid")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(x = "", y = "Legal entities", fill = "")
-ggsave("plots/selected_hospitals/representativity_hospital_numbers.png", 
-       p3, height = 7, width = 10)
+  labs(x = "", y = "Legal entities in 2020", fill = "")
 
 # Chi2 test of adequation
 chisq.test(spares_nb$Counts_Cohort, 
@@ -499,7 +394,7 @@ enp = data.frame(
   arrange(region)
 
 # Comparison with SPARES data from final cohort
-p4 = bind_rows(spares_p, enp) %>%
+p3 = bind_rows(spares_p, enp) %>%
   mutate(region = recode(region, !!!dict_regions),
          database = factor(database, c("SpF", "Cohort"))) %>%
   ggplot(., aes(x = region, y = p, ymin = pmin, ymax = pmax, col = database)) +
@@ -507,10 +402,10 @@ p4 = bind_rows(spares_p, enp) %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_color_manual(values = c("Cohort"="coral", "SpF"="steelblue3")) +
-  labs(x = "", y = "HAI prevalence (95% CI)", col = "") +
+  labs(x = "", y = "Prevalence of HAI (SpF) or\nbacterial episodes (Cohort), 95% CI", col = "") +
   expand_limits(y = 0)
 
-p5 = bind_rows(spares_p, enp) %>%
+p4 = bind_rows(spares_p, enp) %>%
   group_by(database) %>%
   mutate(dist = p/sum(p), 
          region = recode(region, !!!dict_regions),
@@ -522,24 +417,22 @@ p5 = bind_rows(spares_p, enp) %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_fill_manual(values = c("Cohort" = "coral", "SpF" = "steelblue3")) +
-  labs(x = "", y = "Distribution of HAI prevalence", fill = "") 
+  labs(x = "", y = "Distribution of prevalence", fill = "") 
 
 ################################################################################
 # Final supplementary figures 
 ################################################################################
-# Distribution of hospital types by regions
-ggsave("../Paper/Supplementary/hospital_type_regional_distribution.png", 
-       p1, height = 5, width = 8)
-
 # Final figure on the representativity of the cohort
 p = ggarrange(
-  ggarrange(p3, p2, ncol = 2, align = "hv", common.legend = T, legend = "right",
+  ggarrange(p1, p2, ncol = 2, align = "hv", common.legend = T, legend = "right",
             labels = c("A", "B")),
-  ggarrange(p4, p5, ncol = 2, align = "hv", common.legend = T, legend = "right",
+  ggarrange(p3, p4, ncol = 2, align = "hv", common.legend = T, legend = "right",
             labels = c("C", "")),
   heights = c(1, 0.7),
   nrow = 2
 )
 p
 ggsave("../Paper/Supplementary/hospital_cohort_representativity.png", 
+       p, height = 7, width = 10)
+ggsave("plots/cohort_description/hospital_cohort_representativity.png", 
        p, height = 7, width = 10)

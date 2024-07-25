@@ -68,8 +68,11 @@ sas/
 R/analyses/0.hospital_sample_selection.R
 R/analyses/1.convert_sas_db.R
 R/analyses/2.patient_sample_selection.R
+R/analyses/2bis.patient_sample_selection_final_cohort.R
 R/analyses/3.final_numbers.R
-R/analyses/4.cohort_representativity.R
+R/analyses/4.intubation_data.R
+R/analyses/5.cohort_representativity.R
+R/analyses/6.save_aggregated_data.R
 
 # Plots
 plots/atlas/
