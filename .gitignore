@@ -55,7 +55,7 @@ data/cohort_19202122.rda
 data/icu_cohort_final.rda
 data/icu_cohort19202122.rda
 data/metadata_admin.rda
-data/metadata_espic.rda
+data/metadata_admin_espic.rda
 data/metadata_beds.rda
 
 # Additional analyses
