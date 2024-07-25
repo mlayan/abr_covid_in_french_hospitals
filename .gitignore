@@ -47,3 +47,31 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Raw data 
+data-raw/
+data/cohort_final.rda
+data/cohort_19202122.rda
+data/icu_cohort_final.rda
+data/icu_cohort19202122.rda
+data/metadata_admin.rda
+data/metadata_espic.rda
+data/metadata_beds.rda
+
+# Additional analyses
+R/analyses/others/
+
+# SAS functions
+sas/
+
+# Raw data management
+R/analyses/0.hospital_sample_selection.R
+R/analyses/1.convert_sas_db.R
+R/analyses/2.patient_sample_selection.R
+R/analyses/3.final_numbers.R
+R/analyses/4.cohort_representativity.R
+
+# Plots
+plots/atlas/
+plots/saint_joseph_saint_luc/
+plots/pmsi_data_cleaning/
