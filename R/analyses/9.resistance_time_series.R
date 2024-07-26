@@ -138,8 +138,8 @@ ggsave("../Paper/Figures/Figure3.png", figure3, height = 8, width = 12)
 # Comparison with annual incidence rate reported
 # by SPARES
 ##################################################
-# Load data
-report = read_excel("data-raw/spares/reports/incidence_density_from_reports.xlsx") %>%
+# Load SPARES annual incidence data
+report = read_excel("data-raw/spares/incidence_density_from_reports.xlsx") %>%
   mutate(bacterie = case_when(
     bacterie == "Enterobacter cloacae complex" ~ "ESBL E. cloacae",
     bacterie == "Escherichia coli" ~ "ESBL E. coli",
@@ -149,308 +149,44 @@ report = read_excel("data-raw/spares/reports/incidence_density_from_reports.xlsx
   ) %>%
   rename(SPARES = di_manual, Date_year = qrt)
 
-# Annual number of hospitalisation days
-hd_annual_secteur = hd %>%
-  mutate(Date_year = ifelse(year(Date_week) == 2018, 2019, year(Date_week))) %>%
-  filter(!(secteur == "Réanimation" & !code %in% icu_cohort_final)) %>%
-  group_by(Date_year, secteur) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop")
-
-hd_annual_etab = hd %>%
-  mutate(Date_year = ifelse(year(Date_week) == 2018, 2019, year(Date_week))) %>%
-  group_by(Date_year, code) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop")
-
-hd_annual = hd %>%
-  mutate(Date_year = ifelse(year(Date_week) == 2018, 2019, year(Date_week))) %>%
+# Annual number of hospitalization days
+bd_annual = bd_pmsi_hospital %>%
   group_by(Date_year) %>%
   summarise(nbjh = sum(nbjh), .groups = "drop")
 
-# Annual incidence 
-res %>%
-  group_by(Date_year, secteur, bacterie) %>%
-  summarise(n_res = sum(n_res), .groups = "drop") %>%
-  left_join(., hd_annual_secteur, by = c("Date_year", "secteur")) %>%
-  mutate(incidence = n_res / nbjh * 1000) %>%
-  ggplot(., aes(x = factor(Date_year), y = incidence, fill = secteur)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.5) +
-  facet_wrap(facets = vars(bacterie), ncol = 3, scales = "free_y") +
-  theme_bw() +
-  labs(x = "", y = "Incidence rate (per 1,000 hospitalisation days)",
-       fill = "")
-ggsave("plots/resistances/incidence_secteur.png", height = 8, width = 12)
-
 # Comparison with SPARES
-res %>%
-  filter(bacterie %in% c("ESBL E. cloacae", "ESBL E. coli",
-                         "ESBL K. pneumoniae", "MRSA")) %>%
+res_hospital %>%
   group_by(bacterie, Date_year) %>%
   summarise(n_res = sum(n_res), .groups = "drop") %>%
-  left_join(., hd_annual, by = "Date_year") %>%
-  mutate(`AMR COVID` = n_res / nbjh * 1000) %>%
+  left_join(., bd_annual, by = "Date_year") %>%
+  mutate(Cohort = n_res / nbjh * 1000) %>%
   left_join(., report[, c("Date_year", "SPARES", "bacterie")], by = c("Date_year", "bacterie")) %>%
-  pivot_longer(c(`AMR COVID`, SPARES), names_to = "database", values_to = "incidence") %>%
+  filter(!is.na(SPARES)) %>%
+  pivot_longer(c(Cohort, SPARES), names_to = "database", values_to = "incidence") %>%
   ggplot(., aes(x = factor(Date_year), y = incidence, fill = database)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.5) +
   facet_wrap(facets = vars(bacterie), ncol = 2, scales = "free_y") +
   theme_bw() +
   labs(x = "", y = "Incidence rate (per 1,000 hospitalisation days)",
        fill = "")
-ggsave("plots/resistances/comparison_incidence_spares_report.png", 
-       height = 5, width = 8)
-
-# Weekly number of hospitalisation days
-hd_weekly_etab = hd %>%
-  group_by(Date_week, code, region) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop")
-
-# Names of hospitals
-hosp_names = metadata_admin_espic %>% 
-  filter(code %in% cohort_final) %>% 
-  dplyr::select(code, name) %>% 
-  distinct() 
-
-##################################################
-# Plot national level time series 
-##################################################
-# Weekly bed-days - Hospital
-weekly_bd = hd %>%
-  group_by(Date_week) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") 
-
-# Weekly bed-days ICUs
-weekly_bd_icu = hd %>%
-  filter(secteur == "Réanimation") %>%
-  group_by(Date_week) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") 
-
-# Function to plot counts, incidence and resistance percentage
-plot_national_ts = function(df, plot_name, df_bd) {
-  
-  out = df %>%
-    group_by(Date_week, bacterie) %>%
-    summarise(n_res = sum(n_res), n_tot = sum(n_tot), .groups = "drop") %>%
-    left_join(., df_bd, by = c("Date_week")) %>%
-    mutate(
-      `Weekly incidence of infections\n(per 1,000 bed-days)` = n_tot / nbjh * 1000,
-      `Weekly incidence of resistant infections\n(per 1,000 bed-days)`= n_res / nbjh * 1000,
-      `Weekly resistance percentage` = n_res / n_tot * 100
-    ) %>% 
-    rename(
-      `Weekly number of infections` = n_tot,
-      `Weekly number of resistant infections` = n_res,
-      `Weekly number of bed-days` = nbjh
-    ) %>%
-    pivot_longer(matches("^Weekly"), names_to = "metrics", values_to = "values") %>%
-    mutate(metrics = factor(metrics, c(
-      "Weekly number of bed-days",
-      "Weekly number of infections", 
-      "Weekly number of resistant infections", 
-      "Weekly incidence of infections\n(per 1,000 bed-days)",
-      "Weekly incidence of resistant infections\n(per 1,000 bed-days)",
-      "Weekly resistance percentage"
-    ))) %>%
-    ggplot(., aes(x = as.Date(Date_week), y = values)) +
-    annotate("rect", xmin = as.Date("2020-03-16"), xmax = as.Date("2020-05-10"), ymin = 0, ymax = Inf, fill = "gray90") +
-    annotate("rect", xmin = as.Date("2020-10-30"), xmax = as.Date("2020-12-15"), ymin = 0, ymax = Inf, fill = "gray90") +
-    geom_line() +
-    ggh4x::facet_grid2(cols = vars(metrics), rows = vars(bacterie), scales = "free_y", 
-                       independent = "y") +
-    geom_hline(yintercept = 0, col = "#00000000") +
-    theme_bw() +
-    labs(x = "", y = "")
-  
-  print(out)
-  
-  ggsave(paste0("plots/resistances/timeseries_", gsub(" ", "_", plot_name), ".png"), 
-         out, height = 12, width = 18)  
-}
-
-# Number of resistances, number of tests, resistance rates - All infections 
-plot_national_ts(res, "all", weekly_bd)
-
-# Number of resistances, number of tests, resistance rates - Blood-sourced infections
-plot_national_ts(res[res$site == "blood-sourced infection", ], "blood_sourced", weekly_bd)
-
-# Number of resistances, number of tests, resistance rates - Respiratory infections
-plot_national_ts(res[res$site == "lower respiratory tract infection", ], "lrti", weekly_bd)
-
-# Number of resistances, number of tests, resistance rates - CHU
-plot_national_ts(res %>% 
-                   left_join(., metadata_admin_espic %>% dplyr::select(code, type) %>% distinct(), by = "code") %>% 
-                   filter(type %in% c("CHU", "ESPIC")), 
-                 "chu-espic", 
-                 weekly_bd)
-
-plot_national_ts(res %>% 
-                   left_join(., metadata_admin_espic %>% dplyr::select(code, type) %>% distinct(), by = "code") %>% 
-                   filter(type == "CHU"), 
-                 "chu", 
-                 weekly_bd)
-
-plot_national_ts(res %>% 
-                   left_join(., metadata_admin_espic %>% dplyr::select(code, type) %>% distinct(), by = "code") %>% 
-                   filter(type == "MCO"), 
-                 "mco", 
-                 weekly_bd)
-
-plot_national_ts(res %>% 
-                   left_join(., metadata_admin_espic %>% dplyr::select(code, type) %>% distinct(), by = "code") %>% 
-                   filter(type == "CH"), 
-                 "ch", 
-                 weekly_bd)
-
-plot_national_ts(res %>% 
-                   left_join(., metadata_admin_espic %>% dplyr::select(code, type) %>% distinct(), by = "code") %>% 
-                   filter(type == "ESSR"), 
-                 "essr", 
-                 weekly_bd)
-
-# Number of resistances, number of tests, resistance rates - Blood-sourced infections in ICUs
-plot_national_ts(res[res$site == "blood-sourced infection" & res$secteur == "Réanimation", ], 
-                 "blood_sourced_icu", weekly_bd_icu)
-
-# Number of resistances, number of tests, resistance rates - Respiratory infections in ICUs
-plot_national_ts(res[res$site == "lower respiratory tract infection" & res$secteur == "Réanimation", ], 
-                 "lrti_icu", weekly_bd_icu)
-
-# Number of resistances, number of tests, resistance rates - All infections in ICUs
-plot_national_ts(res[res$secteur == "Réanimation", ], "all_icu", weekly_bd_icu)
+ggsave("plots/antibiotic_resistance/comparison_incidence_spares_report.png", height = 5, width = 8)
 
 ##################################################
 # Plot regional level time series 
 ##################################################
-# Weekly bed-days - Hospital
-weekly_regional_bd = hd %>%
-  group_by(Date_week, region) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") 
-
-# Weekly bed-days ICUs
-weekly_regional_bd_icu = hd %>%
-  filter(secteur == "Réanimation") %>%
-  group_by(Date_week, region) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") 
-
-# Function to plot counts, incidence and resistance percentage
-plot_regional_ts = function(df, b, plot_name, df_bd, df_region = metadata_admin_espic,
-                            hexagonal_france = my_regional_grid) {
-  
-  out = df %>%
+# Incidence 
+for (b in unique(res_hospital$bacterie)) {
+  p = res_regions %>%
     filter(bacterie == b) %>%
-    left_join(., df_region %>% select(code, region) %>% distinct(), by = "code") %>%
-    group_by(Date_week, region, bacterie) %>%
-    summarise(n_res = sum(n_res), n_tot = sum(n_tot), .groups = "drop") %>%
-    left_join(., df_bd, by = c("Date_week", "region")) %>%
-    mutate(
-      incidence_total = n_tot / nbjh * 1000,
-      incidence_resistance = n_res / nbjh * 1000,
-      resistance_percentage = n_res / n_tot * 100
-    )
-    
-  p1 = ggplot(out, aes(x = as.Date(Date_week), y = incidence_total)) +
-    annotate("rect", xmin = as.Date("2020-03-16"), xmax = as.Date("2020-05-10"), ymin = 0, ymax = Inf, fill = "gray90") +
-    annotate("rect", xmin = as.Date("2020-10-30"), xmax = as.Date("2020-12-15"), ymin = 0, ymax = Inf, fill = "gray90") +
+    left_join(., bd_pmsi_regions, by = c("Date_week", "Date_year", "region")) %>%
+    mutate(res_incidence = n_res / nbjh * 1000, region = recode(region, !!!dict_regions)) %>%
+    ggplot(., aes(x = as.Date(Date_week), y = res_incidence)) +
     geom_line() +
-    facet_geo(facets = vars(region), grid = hexagonal_france) +
-    geom_hline(yintercept = 0, col = "#00000000") +
-    theme_bw() +
-    labs(x = "", y = "", title = paste0("Weekly incidence rate of infections - ", b))
-  ggsave(paste0("plots/resistances/timeseries_regional_I_", gsub(" ", "", tolower(b)), "_", gsub(" ", "_", plot_name), ".png"), 
-         p1, height = 8, width = 10)  
-  
-  p2 = ggplot(out, aes(x = as.Date(Date_week), y = incidence_resistance)) +
-    annotate("rect", xmin = as.Date("2020-03-16"), xmax = as.Date("2020-05-10"), ymin = 0, ymax = Inf, fill = "gray90") +
-    annotate("rect", xmin = as.Date("2020-10-30"), xmax = as.Date("2020-12-15"), ymin = 0, ymax = Inf, fill = "gray90") +
-    geom_line() +
-    facet_geo(facets = vars(region), grid = hexagonal_france) +
-    geom_hline(yintercept = 0, col = "#00000000") +
-    theme_bw() +
-    labs(x = "", y = "", title = paste0("Weekly incidence rate of resistant infections - ", b))
-  ggsave(paste0("plots/resistances/timeseries_regional_RI_", gsub(" ", "", tolower(b)), "_", gsub(" ", "_", plot_name), ".png"), 
-         p2, height = 8, width = 10)  
-  
-  p3 = ggplot(out, aes(x = as.Date(Date_week), y = resistance_percentage)) +
-    annotate("rect", xmin = as.Date("2020-03-16"), xmax = as.Date("2020-05-10"), ymin = 0, ymax = Inf, fill = "gray90") +
-    annotate("rect", xmin = as.Date("2020-10-30"), xmax = as.Date("2020-12-15"), ymin = 0, ymax = Inf, fill = "gray90") +
-    geom_line() +
-    facet_geo(facets = vars(region), grid = hexagonal_france) +
-    geom_hline(yintercept = 0, col = "#00000000") +
-    theme_bw() +
-    labs(x = "", y = "", title = paste0("Weekly resistance percentage - ", b))
-  ggsave(paste0("plots/resistances/timeseries_regional_RP_", gsub(" ", "", tolower(b)), "_", gsub(" ", "_", plot_name), ".png"), 
-         p3, height = 8, width = 10)  
-  
+    facet_wrap(facets = vars(region), ncol = 4) +
+    theme_bw() + 
+    labs(x = "", y = paste0("Weekly incidence of ", b, " (for 1,000 bed-days)"))
+  ggsave(paste0("plots/antibiotic_resistance/", gsub(" ", "", b), "_region.png"), 
+         p, height = 6, width = 11)
 }
-
-for (b in c("CR P. aeruginosa", "ESBL E. cloacae", "ESBL K. pneumoniae")) {
-  # Number of resistances, number of tests, resistance rates - Blood-sourced infections
-  plot_regional_ts(res[res$site == "blood-sourced infection", ],
-                   b, "blood_sourced", weekly_regional_bd)
-  
-  # Number of resistances, number of tests, resistance rates - Respiratory infections
-  plot_regional_ts(res[res$site == "lower respiratory tract infection", ], 
-                   b, "lrti", weekly_regional_bd)
-  
-  # Number of resistances, number of tests, resistance rates - All infections 
-  plot_regional_ts(res, b, "all", weekly_regional_bd)
-}
-
-##################################################
-# Plot resistance rate time series at the national
-# level
-##################################################
-# Weekly resistance rate
-res %>%
-  group_by(Date_week, bacterie) %>%
-  summarise(
-    n_res = sum(n_res),
-    n_tot = sum(n_tot),
-    .groups = "drop"
-  ) %>%
-  complete(Date_week, bacterie, fill = list(n_tot = 0 , n_res = 0)) %>%
-  group_by(Date_week, bacterie) %>%
-  nest() %>%
-  mutate(cfint = map(data, function(.data) getBinomCI(.data, sides = "two.sided", method = "wilson"))) %>%
-  unnest(cols = c(data, cfint)) %>%
-  ungroup() %>%
-  ggplot(., aes(x = as.Date(Date_week), y = res_rate, ymin = res_rate_lwr, ymax = res_rate_upr, 
-                col = bacterie, fill = bacterie)) +
-  facet_wrap(facets = vars(bacterie), ncol = 3, scales = "free_y") +
-  annotate("rect", xmin = as.Date("2020-03-16"), xmax = as.Date("2020-05-10"), ymin = 0, ymax = Inf, fill = "gray90") +
-  annotate("rect", xmin = as.Date("2020-10-30"), xmax = as.Date("2020-12-15"), ymin = 0, ymax = Inf, fill = "gray90") +
-  geom_line() +
-  geom_ribbon(alpha = 0.2, col = "#00000000") +
-  theme_bw() +
-  theme(legend.position = "none") +
-  labs(x = "", y = "Weekly resistance rate (95% CI)", col = "")
-ggsave("plots/resistances/weekly_rrate_national.png", height = 7, width = 8)
-
-
-# Weekly resistance rate in ICUs
-res %>%
-  filter(secteur == "Réanimation", code %in% icu_cohort_final) %>%
-  group_by(Date_week, bacterie) %>%
-  summarise(
-    n_res = sum(n_res),
-    n_tot = sum(n_tot),
-    .groups = "drop"
-  ) %>%
-  complete(Date_week, bacterie, fill = list(n_tot = 0 , n_res = 0)) %>%
-  group_by(Date_week, bacterie) %>%
-  nest() %>%
-  mutate(cfint = map(data, function(.data) getBinomCI(.data, sides = "two.sided", method = "wilson"))) %>%
-  unnest(cols = c(data, cfint)) %>%
-  ungroup() %>%
-  ggplot(., aes(x = as.Date(Date_week), y = res_rate, ymin = res_rate_lwr, ymax = res_rate_upr, 
-                col = bacterie, fill = bacterie)) +
-  facet_wrap(facets = vars(bacterie), ncol = 3, scales = "free_y") +
-  annotate("rect", xmin = as.Date("2020-03-16"), xmax = as.Date("2020-05-10"), ymin = 0, ymax = Inf, fill = "gray90") +
-  annotate("rect", xmin = as.Date("2020-10-30"), xmax = as.Date("2020-12-15"), ymin = 0, ymax = Inf, fill = "gray90") +
-  geom_line() +
-  geom_ribbon(alpha = 0.2, col = "#00000000") +
-  theme_bw() +
-  theme(legend.position = "none") +
-  labs(x = "", y = "Weekly resistance rate (95% CI)", col = "")
-ggsave("plots/resistances/weekly_rrate_national_icu.png", height = 7, width = 8)
 
 
