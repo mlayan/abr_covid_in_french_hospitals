@@ -1,64 +1,56 @@
+##################################################
+## CREATE DATAFRAME WITH INTERVENTIONS
+## PERIODS AGAINST SARS-COV-2 IN THE 
+## COMMUNITY
+##################################################
 rm(list = ls())
-
-# Data management and visualisation
-library(readxl)
-library(xlsx)
 library(tidyverse)
-
-# Helper functions
-source("R/helper_functions.R")
-
-# Basic data
-load("data/my_regional_grid.rda")
-load("data/dict_regions.rda")
-
-# All dates of the study period
-all_dates = seq(as.Date("2019-01-07"), as.Date("2022-12-19"), 7)
-
-# Correspondences departments/regions France
-load("data/dict_regions_nb.rda")
-corres = read.csv("data-raw/geography/departement_2022.csv") %>%
-  dplyr::select(DEP, REG) %>%
-  rename(dep = DEP, reg = REG) %>%
-  mutate(region = recode(reg, !!!dict_regions_nb)) %>%
-  dplyr::select(-reg) %>%
-  filter(!dep %in% c("2A", "2B", "971", "972", "973", "974", "976"))
+source("R/helper/helper_functions.R")
+source("R/helper/dictionaries.R")
 
 ##################################################
 # Periods in Juliette's paper
+# https://doi.org/10.1186/s12879-023-08106-1
 ##################################################
 # Data frame of the measures before and after the study period of Juliette's paper
 unstudied_periods = expand.grid(
-  date = c(seq(as.Date("2019-01-01"), as.Date("2019-12-31"), 1), seq(as.Date("2021-05-19"), as.Date("2022-12-19"), 1)),
+  date = c(seq(min(all_dates), as.Date("2019-12-31"), 1), seq(as.Date("2021-05-19"), max(all_dates), 1)),
   dep = corres$dep,
   Confinement = "none",
   `Couvre.feu` = "none"
 ) 
 
-# Load raw data
+# Load raw data from Juliette's paper 
 int = read.csv("data-raw/interventions/Data_dep_explanatory_model_20240226_Maylis.csv", header = T) %>%
   filter(!dep %in% c("2A", "2B")) %>%
   mutate(date = as.Date(date, "%Y-%m-%d")) %>%
   bind_rows(unstudied_periods) %>%
   arrange(date, dep)
 
-int %>% group_by(dep, date) %>% mutate(n = n()) %>% filter(n > 1)
-int %>% group_by(dep) %>% mutate(d = as.numeric(difftime(date, lag(date)))) %>% filter(d != 1 & !is.na(d))
-sort(unique(int$Confinement))
-sort(unique(int$Couvre.feu))
-max(int$date)
-min(int$date)
+# Verifications
+  # Only one intervention per day x department
+  int %>% group_by(dep, date) %>% mutate(n = n()) %>% filter(n > 1)
+  # No missing day
+  int %>% group_by(dep) %>% mutate(d = as.numeric(difftime(date, lag(date)))) %>% filter(d != 1 & !is.na(d))
+  # All types of lockdowns
+  sort(unique(int$Confinement))
+  # All types of curfew
+  sort(unique(int$Couvre.feu))
+  # Start and end of the intervention dataframe  
+  c(max(int$date), max(all_dates))
+  c(min(int$date), min(all_dates))
 
-# Classification into the 3 restriction periods in our study
-# See excel sheet with correspondances from Paireau's paper 
-# https://doi.org/10.1186/s12879-023-08106-1
-high_restrictions = c("first", "first_light", "first_light2", "second", "second_light", "third", "third_light")
+# Classification into the 4 restriction periods in our study
+# See excel sheet with correspondences from Paireau's paper (https://doi.org/10.1186/s12879-023-08106-1)
+first_wave = c("first", "first_light")
+high_restrictions = c("first_light2", "second", "second_light", "third", "third_light")
 
 int_dep = int %>%
   left_join(., corres, by = "dep") %>%
   mutate(
+    p_first_wave = ifelse(),
     p_strong_res = ifelse(Confinement %in% high_restrictions, 1 , 0), 
-    p_mild_res = ifelse((!Confinement %in% c(high_restrictions, "none") & date <= as.Date("2021-05-18")) |
+    p_mild_res = ifelse((!Confinement %in% c(first_wave, high_restrictions, "none") & date <= as.Date("2021-05-18")) |
                           (date >= as.Date("2021-05-19") & date <= as.Date("2021-06-29")) |
                           (date >= as.Date("2021-12-10") & date <= as.Date("2022-01-24"))
                           , 1, 0),
@@ -181,6 +173,26 @@ int_national_start_end = int_dep %>%
 
 int_national_start_end$end[is.na(int_national_start_end$end)] = as.Date("2022-12-19")
 usethis::use_data(int_national_start_end, overwrite = T)
+
+
+##################################################
+# Interventions 
+##################################################
+int_national = int_national %>%
+  mutate(p_first = ifelse(Date_week >= as.Date("2020-03-16") & Date_week <= as.Date("2020-06-15"), p_strong_res, 0)) %>%
+  mutate(p_strong_res = ifelse(Date_week >= as.Date("2020-03-16") & Date_week <= as.Date("2020-06-15"), 0, p_strong_res)) %>%
+  mutate(
+    periods = case_when(
+      p_strong_res + p_mild_res + p_no_res + p_first == 0 ~ "pre-pandemic",
+      p_first > 0.5 ~ "first wave", #  & Date_week <= as.Date("2020-04-13") 
+      p_strong_res > 0.5 ~ "strong res", # | (p_first > 0.5 & Date_week > as.Date("2020-04-13")) 
+      p_mild_res > 0.5 ~ "mild res",
+      p_no_res > 0.5 ~ "low to no res",
+      .default = NA
+    ) 
+  ) %>%
+  dplyr::select(Date_week, periods) %>%
+  mutate(periods = factor(periods, c("pre-pandemic", "first wave", "strong res", "mild res", "low to no res")))
 
 ##################################################
 # COVID-19 periods

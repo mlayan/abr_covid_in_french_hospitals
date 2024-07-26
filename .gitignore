@@ -49,7 +49,18 @@ po/*~
 rsconnect/
 
 # Raw data 
-data-raw/
+data-raw/aphp/
+data-raw/atih/
+data-raw/communes/
+data-raw/drees/
+data-raw/earsnet/
+data-raw/interventions/
+data-raw/sidep/
+data-raw/sivic/
+data-raw/spares/*/
+data-raw/who/
+
+# Processed non-anonymous data
 data/cohort_final.rda
 data/cohort_19202122.rda
 data/icu_cohort_final.rda
@@ -71,7 +82,7 @@ R/analyses/2.patient_sample_selection.R
 R/analyses/2bis.patient_sample_selection_final_cohort.R
 R/analyses/3.final_numbers.R
 R/analyses/4.intubation_data.R
-R/analyses/5.cohort_representativity.R
+R/analyses/4.cohort_representativity.R
 R/analyses/6.save_aggregated_data.R
 
 # Plots

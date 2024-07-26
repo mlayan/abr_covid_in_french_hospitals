@@ -1,9 +1,18 @@
+# THIS DICTIONARY FILE USES THE FOLLOWING DEPENDENCIES
+  # dplyr
+  # geofacet
+  # sf
+  # readxl
+
 # Bacteria of interest 
 bacteria_of_interest = c("Enterobacter cloacae complex", 
                          "Escherichia coli", 
                          "Klebsiella pneumoniae",
                          "Staphylococcus aureus", 
                          "Pseudomonas aeruginosa")
+
+# All week dates of the study period
+all_dates = seq(as.Date("2019-01-07"), as.Date("2022-12-19"), 7)
 
 # Enzymes
 enzymes = c("BLSE", "Carbapénèmase", "Céphalosporinase déréprimée")
@@ -98,8 +107,7 @@ dict_hospital_type = c(
   "MCO" = "Private for profit hospital"
 )
 
-# Antibiotic class full
-# https://www.whocc.no/atc_ddd_index/
+# Antibiotic class full (https://www.whocc.no/atc_ddd_index/)
 dict_antibiotic_class = c(
   "J01GB01" = "Aminoglycosides",
   "J01GB06" = "Aminoglycosides",
@@ -208,28 +216,10 @@ dict_antibiotic_class = c(
   "J01DH56" = "Anti-MDR GNB",
   "J01DH52" = "Anti-MDR GNB",
   "J01DI04" = "Anti-MDR GNB"
-  
 )
-
-# "J01CA04" = "Broad spectrum Penicillins",
-# "J01CA01" = "Broad spectrum Penicillins",
-# "J01CA08" = "Broad spectrum Penicillins",
-# "J01CA17" = "Broad spectrum Penicillins",
-# "J01CA13" = "Broad spectrum Penicillins",
-# "J01CA12" = "Broad spectrum Penicillins",
-# "J01CR02" = "Broad spectrum Penicillins",
-# "J01CR01" = "Broad spectrum Penicillins",
-# "J01CR03" = "Broad spectrum Penicillins", 
-# "J01CR05" = "Broad spectrum Penicillins",
-# "J01CE08" = "Narrow spectrum Penicillins",
-# "J01CE01" = "Narrow spectrum Penicillins",
-# "J01CE02" = "Narrow spectrum Penicillins",
-# "J01CF02" = "Narrow spectrum Penicillins",
-# "J01CF04" = "Narrow spectrum Penicillins",
 
 # 3GC
 vec_3gc = c("J01DD08", "J01DD01", "J01DD13", "J01DD02", "J01DD52", "J01DD04")
-
 
 # Dictionary of antibiotic class and antibiotic name (for microbiological data)
 dict_molecule_class = c(
@@ -415,6 +405,14 @@ dict_regions_nb = c(
   "93" = "Provence-Alpes-Côte d'Azur",
   "4" = "La Réunion"
 )
+
+# Correspondences departments/regions France
+corres = read.csv("data-raw/geography/departement_2022.csv") %>%
+  dplyr::select(DEP, REG) %>%
+  rename(dep = DEP, reg = REG) %>%
+  mutate(region = recode(reg, !!!dict_regions_nb)) %>%
+  dplyr::select(-reg) %>%
+  filter(!dep %in% c("2A", "2B", "971", "972", "973", "974", "976"))
 
 # Regional grid for geofacet
 my_regional_grid = geofacet::fr_regions_grid1
