@@ -3,6 +3,7 @@
   # geofacet
   # sf
   # readxl
+  # RColorBrewer
 
 # Bacteria of interest 
 bacteria_of_interest = c("Enterobacter cloacae complex", 

@@ -57,7 +57,7 @@ ggsave("../Paper/Supplementary/weekly_resistance_proportion.png", height = 9, wi
 ggsave("plots/antibiotic_resistance/weekly_resistance_proportion.png", height = 9, width = 8)
 
 ##################################################
-# Description of bacterial samples (Figure 2)
+# Description of bacterial samples (Figure 3)
 ##################################################
 # Table with the total no. of episodes (R and not R)
 tab_tot = res_hospital %>%
@@ -123,106 +123,16 @@ plot_res_i = bind_rows(
 ggsave("plots/antibiotic_resistance/national_weekly_incidence.png", plot_res_i, height = 6, width = 12)
 
 # Final figure
-figure2 = ggarrange(
+figure3 = ggarrange(
   ggarrange(tab_tot, plot_res_p, nrow = 2, heights = c(1, 0.8), labels = c("A", "B")), 
   plot_res_i,
   ncol = 2,
   labels = c("", 'C'),
   widths = c(0.6,1)
 )
-figure2
-ggsave("plots/Figure2.png", figure2, height = 8, width = 12)
-ggsave("../Paper/Figures/Figure2.png", figure2, height = 8, width = 12)
-
-##################################################
-# Paper figure 3 - Bed days - Total and Covid-19
-##################################################
-# Total bed-days
-hd_icu = hd %>%
-  filter(secteur == "Réanimation") %>%
-  group_by(Date_week) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") %>%
-  mutate(secteur = "ICU")
-
-plot_bd = hd %>%
-  group_by(Date_week) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") %>%
-  mutate(secteur = "Hospital") %>%
-  bind_rows(., hd_icu) %>%
-  filter(!Date_week %in% c(as.Date("2018-12-31"), as.Date("2022-12-26"))) %>%
-  ggplot(., aes(x = as.Date(Date_week), y = nbjh)) +
-  geom_rect(data = int_national_start_end, 
-            aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
-  geom_line() +
-  facet_wrap(facets = vars(secteur), scales = "free_y") +
-  theme_bw() +
-  theme(legend.position = "bottom",  
-        legend.key = element_rect(colour = "black"),
-        legend.title.align = 0.5) +
-  guides(fill = guide_legend(title.position = "top")) +
-  scale_fill_manual(
-    name = "Anti-Covid-19 interventions",
-    labels = c("First wave", "Strong", "Intermediary", "Light to none"),
-    breaks = c("p_first", "p_strong_res", "p_mild_res", "p_no_res"),
-    values = c("p_first" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
-  ) +
-  scale_y_continuous(labels = scales::label_comma()) +
-  expand_limits(y = 0) +
-  labs(x = "", y = "Weekly bed-days")
-
-# Covid-19 bed-days
-to_add = data.frame(
-  Date_week = seq(as.Date("2019-01-07"), as.Date("2019-12-02"), by = 7),
-  nintub = 0
-)
-
-covid_icu = haven::read_sas("data-raw/atih/mco_intubation_weekly.sas7bdat") %>%
-  rename(finess = FinessGeo) %>%
-  left_join(., metadata_admin_espic %>% dplyr::select(finess, region) %>% distinct(), by = "finess") %>%
-  filter(!is.na(region), status == "covid", secteur == "Réanimation") %>%
-  group_by(Date_week) %>%
-  summarise(nintub = sum(nbjh), .groups = "drop") %>%
-  bind_rows(., to_add) %>%
-  mutate(secteur = "ICU")
-
-
-plot_covid = haven::read_sas("data-raw/atih/mco_intubation_weekly.sas7bdat") %>%
-  rename(finess = FinessGeo) %>%
-  left_join(., metadata_admin_espic %>% dplyr::select(finess, region) %>% distinct(), by = "finess") %>%
-  filter(!is.na(region), status == "covid") %>%
-  group_by(Date_week) %>%
-  summarise(nintub = sum(nbjh), .groups = "drop") %>%
-  bind_rows(., to_add) %>%
-  mutate(secteur = "Hospital") %>%
-  bind_rows(., covid_icu) %>%
-  filter(Date_week != "2022-12-26") %>%
-  ggplot(., aes(x = as.Date(Date_week), y = nintub)) +
-  geom_rect(data = int_national_start_end, 
-            aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
-  geom_line() +
-  facet_wrap(facets = vars(secteur), scales = "free_y") +
-  theme_bw() +
-  theme(legend.position = "bottom",  
-        legend.key = element_rect(colour = "black"),
-        legend.title.align = 0.5) +
-  guides(fill = guide_legend(title.position = "top")) +
-  scale_fill_manual(
-    name = "Anti-Covid-19 interventions",
-    labels = c("First wave", "Strong", "Intermediary", "Light to none"),
-    breaks = c("p_first", "p_strong_res", "p_mild_res", "p_no_res"),
-    values = c("p_first" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
-  ) +
-  expand_limits(y = 0) +
-  scale_y_continuous(labels = scales::label_comma()) +
-  labs(x = "", y = "Weekly intubated Covid-19 bed-days")
-
-# Final figure
-figure3 = ggarrange(plot_bd, plot_covid, nrow = 2, 
-                    labels = c("A", "B"), hjust = -1.5,
-                    common.legend = T, legend = "bottom")
 figure3
-ggsave("../Paper/Figures/Figure3.png", figure3, height = 5, width = 8)
-
+ggsave("plots/Figure3.png", figure3, height = 8, width = 12)
+ggsave("../Paper/Figures/Figure3.png", figure3, height = 8, width = 12)
 
 ##################################################
 # Comparison with annual incidence rate reported
