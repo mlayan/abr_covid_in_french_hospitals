@@ -9,7 +9,7 @@ Full text and supplementary materials are available [here]().
 ### Dependencies
 The code has been tested using R version 4.3.0. It depends on the following R libraries: 
 - Data management: `readxl`, `tidyverse`, `gt`
-- Plots : `RColorBrewer`, `ggpubr`, `sf`
+- Plots : `RColorBrewer`, `ggpubr`, `sf`, `geofacet`
 - Statistical modelling : `MASS`
 
 ### Bacterial sample and hospital selection procedures
