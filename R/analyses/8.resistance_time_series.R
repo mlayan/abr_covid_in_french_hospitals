@@ -1,3 +1,6 @@
+##################################################
+## PLOTS OF ANTIBIOTIC RESISTANCE DATA
+##################################################
 rm(list = ls())
 library(tidyverse)
 library(ggpubr)
@@ -6,19 +9,12 @@ library(readxl)
 library(RColorBrewer)
 
 load("data/metadata_admin_espic.rda")
-load("data/bacteria_of_interest.rda")
 load("data/cohort_final.rda")
 load("data/icu_cohort_final.rda")
-load("data/dict_id_site.rda")
-load("data/dict_site_plot.rda")
-load("data/my_regional_grid.rda")
 load("data/int_national_start_end.rda")
-load("data/dict_secteur_spares.rda")
-
-source("R/helper_functions.R")
-source("R/helper_plots.R")
-
-int_national_start_end$restrictions[int_national_start_end$start == "2020-03-17"] = "p_first" 
+source("R/helper/dictionaries.R")
+source("R/helper/helper_functions.R")
+source("R/helper/helper_plots.R")
 
 ##################################################
 # Load and rearrange resistance data 

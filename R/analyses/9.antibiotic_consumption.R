@@ -1,3 +1,7 @@
+##################################################
+# ANALYSES OF ANTIBIOTIC USE IN FRENCH HOSPITALS
+##################################################
+
 rm(list = ls())
 library(geofacet)
 library(gt)
@@ -15,19 +19,11 @@ library(ggsignif)
 library(sf)
 
 load("data/metadata_admin_espic.rda")
-load("data/dict_id_site.rda")
-load("data/dict_site_plot.rda")
-load("data/dict_antibiotic_class.rda")
-load("data/dict_secteur_spares.rda")
 load("data/cohort_final.rda")
-load("data/my_regional_grid.rda")
-load("data/dict_regions.rda")
-load("data/france.rda")
-load("data/last_line.rda")
-load("data/vec_3gc.rda")
 
-source("R/helper_functions.R")
-source("R/helper_plots.R")
+source("R/helper/dictionaries.R")
+source("R/helper/helper_functions.R")
+source("R/helper/helper_plots.R")
 
 ##################################################
 # Load antibiotic consumption data 
