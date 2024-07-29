@@ -6,6 +6,7 @@ rm(list = ls())
 library(tidyverse)
 library(MASS)
 library(performance)
+library(DescTools)
 library(qqplotr)
 library(ggpubr)
 library(cowplot)
@@ -829,13 +830,13 @@ gtsave(vif_sensitivity_tab, "tables/national_vif.docx")
 
 ##################################################
 # Comparison of regression models with Covid-19 
-# variables of w+1 or w+2
+# variables of w+1, w+2 or w+3
 ##################################################
-# Residuals of best models of w-2
 all_aic = data.frame()
 all_estimates_leads = data.frame()
 all_fits_leads = data.frame()
-models = paste0("model", 7:8)
+models = paste0("model", 7:9)
+names(models) = paste0("Covid-19 intubation prevalence w+", 1:3)
 b = "CR P. aeruginosa"
 
 for (db in c("icu", "hospital")) {
@@ -849,12 +850,14 @@ for (db in c("icu", "hospital")) {
       arrange(Date_week) %>%
       mutate(
         lag1_i_res = lag(n_res / nbjh * 1000, 2),
+        
         lead1_covid_intub_prev = lead(covid_intub_prev, 1),
         lead2_covid_intub_prev = lead(covid_intub_prev,2),
         lead3_covid_intub_prev = lead(covid_intub_prev,3),
+        
         nbjh = nbjh/1000
       ) %>% 
-      filter(!is.na(lead3_covid_intub_prev), !is.na(lag1_i_res)) %>%
+      filter(!is.na(lead2_covid_intub_prev), !is.na(lag1_i_res)) %>%
       mutate(
         Carbapenems = (Carbapenems - mean(Carbapenems)) / sd(Carbapenems),
         lag1_i_res = (lag1_i_res - mean(lag1_i_res)) / sd(lag1_i_res),
@@ -877,12 +880,13 @@ for (db in c("icu", "hospital")) {
       m_eq = "n_res ~ lag1_i_res + lead3_covid_intub_prev + Carbapenems + offset(log(nbjh))"
     }
     
-    m1 = glm.nb(n_res ~ lag1_i_res + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    m2 = glm.nb(n_res ~ lag1_i_res + lead1_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    m3 = glm.nb(n_res ~ lag1_i_res + lead2_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    m4 = glm.nb(n_res ~ lag1_i_res + lead3_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    m5 = glm.nb(n_res ~ lag1_i_res + lag2_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    anova(m1, m2, m3, m4, m5)
+    # m1 = glm.nb(n_res ~ lag1_i_res + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m2 = glm.nb(n_res ~ lag1_i_res + lead1_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m3 = glm.nb(n_res ~ lag1_i_res + lead2_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m4 = glm.nb(n_res ~ lag1_i_res + lead3_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m5 = glm.nb(n_res ~ lag1_i_res + lag2_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # anova(m1, m2, m3, m4, m5)
+    m = glm.nb(m, data=final_db, link=log)
     
     # AIC
     all_aic = bind_rows(all_aic, data.frame(
