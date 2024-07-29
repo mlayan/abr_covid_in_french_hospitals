@@ -982,11 +982,19 @@ p3=all_fits %>%
                                "model9" = "Covid-19 intub. w+3"))
   ) %>%
   ggplot(., aes(x = Date_week)) +
+  geom_rect(data = int_national_start_end, 
+            aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
   facet_grid(cols = vars(setting), rows = vars(model)) +
   geom_line(aes(y = n_res, col = "Data")) +
   geom_line(aes(y = exp(fit), col = "Fit")) +
   geom_ribbon(aes(ymin = exp(fit + qnorm(0.025) * se.fit), ymax = exp(fit + qnorm(0.975) * se.fit)), fill = "red", alpha = 0.4) +
   scale_color_manual(values = c("Data" = "black", "Fit" = "red")) +
+  scale_fill_manual(
+    name = "Anti-Covid-19 interventions",
+    labels = c("First wave", "Strong", "Intermediary", "Light to none"),
+    breaks = c("p_first_wave", "p_strong_res", "p_mild_res", "p_no_res"),
+    values = c("p_first_wave" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
+  ) +
   theme_bw() +
   labs(x = "", y = "Weekly no. of incident CR P. aeruginosa", col = "")
 #ggsave("../Paper/Supplementary/crpa_leads_fits.png", height = 6, width = 10)
