@@ -27,8 +27,8 @@ load("data/res_icu.rda")
 ##################################################
 # Incidence at the hospital level
 df_corr_etab = res_hospital %>%
-  left_join(., covid_intub_hospital %>% mutate(Date_week = as.character(Date_week)), by = c("Date_year", "Date_week")) %>%
-  left_join(., bd_pmsi_hospital, by = c("Date_year", "Date_week")) %>%
+  left_join(., covid_intub_hospital %>% mutate(Date_week = as.character(Date_week)), by = "Date_week") %>%
+  left_join(., bd_pmsi_hospital, by = "Date_week") %>%
   filter(!is.na(covid_intub)) %>%
   mutate(covid_intub_prev = covid_intub / nbjh * 1000, 
          res_i = n_res / nbjh * 1000, 
@@ -37,8 +37,8 @@ df_corr_etab = res_hospital %>%
 
 # Incidence at the ICU level
 df_corr_icu = res_icu %>%
-  left_join(., covid_intub_icu %>% mutate(Date_week = as.character(Date_week)), by = c("Date_year", "Date_week")) %>%
-  left_join(., bd_pmsi_icu, by = c("Date_year", "Date_week")) %>%
+  left_join(., covid_intub_icu %>% mutate(Date_week = as.character(Date_week)), by = "Date_week") %>%
+  left_join(., bd_pmsi_icu, by = "Date_week") %>%
   filter(!is.na(covid_intub)) %>%
   mutate(covid_intub_prev = covid_intub / nbjh * 1000, 
          res_i = n_res / nbjh * 1000, 
@@ -71,8 +71,8 @@ p1 = bind_rows(df_corr_etab, df_corr_icu) %>%
 
 # Correlation with dummy variables
 df_int = bind_rows(
-    res_icu %>% mutate(setting = "ICU") %>% left_join(., bd_pmsi_icu, by = c("Date_year", "Date_week")),
-    res_hospital %>% mutate(setting = "Hospital") %>% left_join(., bd_pmsi_hospital, by = c("Date_year", "Date_week"))
+    res_icu %>% mutate(setting = "ICU") %>% left_join(., bd_pmsi_icu, by = "Date_week"),
+    res_hospital %>% mutate(setting = "Hospital") %>% left_join(., bd_pmsi_hospital, by = "Date_week")
   ) %>%
   mutate(Date_week = as.Date(Date_week), res_incidence = n_res/nbjh*1000) %>%
   left_join(., int_national, by = "Date_week") 

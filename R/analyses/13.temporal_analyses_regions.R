@@ -1,109 +1,86 @@
+##################################################
+## COUNT REGRESSION ANALYSIS AT THE REGIONAL
+## LEVEL IN HOSPITALS 
+##################################################
 rm(list = ls())
-
-# Data management and visualisation
-library(readxl)
 library(tidyverse)
+library(performance)
+library(MASS)
 library(qqplotr)
 library(geofacet)
 library(ggpubr)
 library(cowplot)
 library(gt)
-library(DescTools)
-library(haven)
-
-# Count regression models
-library(performance)
-library(MASS)
-
-# Autoregressive models
-library(forecast)
-
-# Mixed effects models
-library(lme4)
-library(glmmTMB)
-library(ggeffects)
 
 # Helper functions
-source("R/helper_functions.R")
-source("R/helper_plots.R")
-
-# Basic data and dictionaries 
-load("data/metadata_admin_espic.rda")
-load("data/my_regional_grid.rda")
-load("data/dict_regions.rda")
-load("data/int_region.rda")
-load("data/best_models.rda")
+source("R/helper/helper_functions.R")
+source("R/helper/helper_plots.R")
+source("R/helper/dictionaries.R")
 
 ##################################################
 # Load data 
 ##################################################
+# Best regression models at the national level
+load("data/best_models.rda")
+
+# Interventions
+load("data/int_region.rda")
+int_region = int_region %>%
+  mutate(
+    periods = case_when(
+      p_strong_res + p_mild_res + p_no_res + p_first_wave == 0 ~ "pre-pandemic",
+      p_first_wave > 0.5 ~ "first wave", #  & Date_week <= as.Date("2020-04-13") 
+      p_strong_res > 0.5 ~ "strong res", # | (p_first > 0.5 & Date_week > as.Date("2020-04-13")) 
+      p_mild_res > 0.5 ~ "mild res",
+      p_no_res > 0.5 ~ "low to no res",
+      .default = NA
+    ) 
+  ) %>%
+  dplyr::select(Date_week, region, periods) %>%
+  mutate(periods = factor(periods, c("pre-pandemic", "first wave", "strong res", "mild res", "low to no res")))
+
 # Resistances
-res = read.table("data-raw/spares/combined/resistance_cohortfinal.txt", header = T, sep = "\t")
+load("data/res_regions.rda")
 
 # Antibiotic consumption
-atb = read.table("data-raw/spares/combined/antibiotics_cohortfinal.txt", header = T, sep = "\t") %>%
-  filter(secteur == "Hospital") %>%
-  group_by(Date_year, region) %>%
-  summarise(
-    Penicillins  = sum(Penicillins),
-    Third_generation_Cephalosporins  = sum(Third_generation_Cephalosporins),
-    Carbapenems  = sum(Carbapenems),
-    nbjh_spares  = sum(Nbhosp),
-    .groups = "drop"
-  ) 
+load("data/atb_use_regions.rda")
+atb_use_regions = atb_use_regions %>%
+  filter(atb_class %in% c("Imipenem + Meropenem", "Penicillins", "Third generation Cephalosporins")) %>%
+  mutate(consumption = molDDD/Nbhosp*1000, 
+         atb_class = case_when(
+           atb_class == "Imipenem + Meropenem" ~ "Carbapenems", 
+           atb_class == "Third generation Cephalosporins" ~ "TGC",
+           .default = atb_class
+         )) %>%
+  dplyr::select(Date_year, region, atb_class, consumption) %>%
+  pivot_wider(names_from = atb_class, values_from = consumption)
 
-# PMSI JH
-pmsi_jh = read.table("data-raw/atih/pmsi_sejours.txt", header = T, sep = "\t") %>%
-  group_by(Date_week, region) %>%
-  summarise(nbjh = sum(nbjh), .groups = "drop") 
+# Bed-days
+load("data/bd_pmsi_regions.rda")
 
-# PMSI - COVID
-pmsi_covid = read.table("data-raw/atih/pmsi_sejours_covid.txt", header = T, sep = "\t") %>%
-  group_by(Date_week, region) %>%
-  summarise(covid_jh  = sum(covid_jh), .groups = "drop") 
-
-# PMSI - Intubation
-pmsi_intubation = read_sas("data-raw/atih/mco_intubation_weekly.sas7bdat") %>%
-  rename(finess = FinessGeo) %>%
-  left_join(., metadata_admin_espic %>% dplyr::select(finess, region) %>% distinct(), by = "finess") %>%
-  filter(!is.na(region), status == "covid") %>%
-  group_by(Date_week, region) %>%
-  summarise(nintub = sum(nbjh), .groups = "drop")
+# Covid-19 intubation data
+load("data/covid_intub_region.rda")
 
 ##################################################
-# Combine data only at the hospital level 
-# (too few ICUs by region in our final cohort)
+# Combine data 
 ##################################################
-# Regional database
-regional_df = res %>%
-  group_by(Date_year, Date_week, bacterie, region) %>%
-  summarise(n_res = sum(n_res), .groups = "drop") %>%
-  left_join(., pmsi_covid, by = c("region", "Date_week")) %>%
-  left_join(., pmsi_jh, by = c("region", "Date_week")) %>%
-  left_join(., atb, by = c("region", "Date_year")) %>%
-  mutate(Date_week = as.Date(Date_week)) %>%
-  left_join(., pmsi_intubation, by = c("region", "Date_week")) %>%
-  mutate(
-    covid_jh = ifelse(is.na(covid_jh), 0, covid_jh), 
-    nintub = ifelse(is.na(nintub), 0, nintub)
-  ) %>%
-  mutate(
-    covid_jh = covid_jh / nbjh * 1000,
-    covid_intub_prop = ifelse(covid_jh == 0, 0, nintub/covid_jh),
-    Penicillins = Penicillins / nbjh_spares * 1000,
-    Third_generation_Cephalosporins = Third_generation_Cephalosporins / nbjh_spares * 1000,
-    Carbapenems = Carbapenems / nbjh_spares * 1000
-  ) %>%
+regional_df = res_regions %>%
   left_join(., int_region, by = c("Date_week", "region")) %>%
-  mutate(p_first = ifelse(Date_week >= as.Date("2020-03-16") & Date_week <= as.Date("2020-06-15"), p_strong_res, 0)) %>%
-  mutate(p_strong_res = ifelse(Date_week >= as.Date("2020-03-16") & Date_week <= as.Date("2020-06-15"), 0, p_strong_res))
+  left_join(., bd_pmsi_regions, by = c("Date_week", "region")) %>%
+  left_join(., covid_intub_region, by = c("Date_week", "region")) %>%
+  mutate(
+    Date_year = lubridate::year(Date_week),
+    covid_intub = ifelse(is.na(covid_intub), 0, covid_intub)
+  ) %>%
+  left_join(., atb_use_regions, by = c("Date_year", "region")) %>%
+  mutate(covid_intub_prev = covid_intub / nbjh * 1000)
 
 ##################################################
 # Regions most affected by the pandemic
 ##################################################
-df = pmsi_intubation %>%
-  left_join(., pmsi_jh %>% mutate(Date_week = as.Date(Date_week)), by = c("Date_week", "region")) %>%
-  mutate(Date_year = as.numeric(format(Date_week,'%Y')),
+df = covid_intub_region %>%
+  left_join(., bd_pmsi_regions, by = c("Date_week", "region")) %>%
+  mutate(#Date_year = as.numeric(format(Date_week,'%Y')),
          region = recode(region, !!!dict_regions)) %>%
   group_by(Date_year, region) %>%
   summarise(p = sum(nintub)/sum(nbjh)*1000, .groups = "drop") %>%

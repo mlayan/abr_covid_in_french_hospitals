@@ -441,3 +441,13 @@ chu_finess_juridique = data.frame(
 dict_departments = read.csv("data-raw/geography/departement_2022.csv")$LIBELLE
 names(dict_departments) = read.csv("data-raw/geography/departement_2022.csv")$DEP
 
+# Count regression model names
+model_names = c(
+  "model0" = "No Covid-19 variable",
+  "model1" = "Pandemic periods w",
+  "model2" = "Pandemic periods w-1",
+  "model3" = "Pandemic periods w-2",
+  "model4" = "Covid-19 intubation prevalence w", 
+  "model5" = "Covid-19 intubation prevalence w-1", 
+  "model6" = "Covid-19 intubation prevalence w-2"
+)

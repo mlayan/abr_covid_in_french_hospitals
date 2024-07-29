@@ -29,14 +29,14 @@ resistance_prop = bind_rows(
   res_icu %>% mutate(setting = "ICU"),
   res_hospital %>% mutate(setting = "Hospital")
   ) %>%
-  group_by(Date_year, Date_week, bacterie, setting) %>%
+  group_by(Date_week, bacterie, setting) %>%
   nest() %>%
   mutate(cfint = map(data, function(.data) getBinomCI(.data, sides = "two.sided", method = "wilson"))) %>%
   dplyr::select(-data) %>%
   unnest(cfint)
 
 # Plot with anti-Covid-19 interventions periods
-ggplot(resistance_prop, aes(x = as.Date(Date_week), y = res_rate, ymin = res_rate_lwr, ymax = res_rate_upr)) +
+ggplot(resistance_prop, aes(x = Date_week, y = res_rate, ymin = res_rate_lwr, ymax = res_rate_upr)) +
   geom_rect(data = int_national_start_end, 
             aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
   geom_ribbon(fill = "grey10", alpha = 0.2) +
@@ -61,6 +61,7 @@ ggsave("plots/antibiotic_resistance/weekly_resistance_proportion.png", height = 
 ##################################################
 # Table with the total no. of episodes (R and not R)
 tab_tot = res_hospital %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
   group_by(Date_year, bacterie) %>%
   summarise(n_tot = sum(n_tot), .groups = "drop") %>%
   mutate(bacterie = case_when(
@@ -76,6 +77,7 @@ tab_tot = res_hospital %>%
 
 # Plot of annual proportion of resistant infections 
 plot_res_p = res_hospital %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
   group_by(Date_year, bacterie) %>%
   summarise(n_res = sum(n_res), n_tot = sum(n_tot), .groups = "drop") %>%
   group_by(Date_year, bacterie) %>%
@@ -100,11 +102,9 @@ plot_res_i = bind_rows(
     res_hospital %>% mutate(setting = "Hospital"),
     res_icu %>% mutate(setting = "ICU"),
   ) %>%
-  group_by(Date_week, setting, bacterie) %>%
-  summarise(n_res = sum(n_res), .groups = "drop") %>%
   left_join(., bd_all, by = c("Date_week", "setting")) %>%
   mutate(incidence = n_res / nbjh * 1000) %>%
-  ggplot(., aes(x = as.Date(Date_week), y = incidence)) +
+  ggplot(., aes(x = Date_week, y = incidence)) +
   geom_rect(data = int_national_start_end, 
             aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
   geom_line() +
@@ -151,11 +151,13 @@ report = read_excel("data-raw/spares/incidence_density_from_reports.xlsx") %>%
 
 # Annual number of hospitalization days
 bd_annual = bd_pmsi_hospital %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
   group_by(Date_year) %>%
   summarise(nbjh = sum(nbjh), .groups = "drop")
 
 # Comparison with SPARES
 res_hospital %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
   group_by(bacterie, Date_year) %>%
   summarise(n_res = sum(n_res), .groups = "drop") %>%
   left_join(., bd_annual, by = "Date_year") %>%
@@ -178,9 +180,9 @@ ggsave("plots/antibiotic_resistance/comparison_incidence_spares_report.png", hei
 for (b in unique(res_hospital$bacterie)) {
   p = res_regions %>%
     filter(bacterie == b) %>%
-    left_join(., bd_pmsi_regions, by = c("Date_week", "Date_year", "region")) %>%
+    left_join(., bd_pmsi_regions, by = c("Date_week", "region")) %>%
     mutate(res_incidence = n_res / nbjh * 1000, region = recode(region, !!!dict_regions)) %>%
-    ggplot(., aes(x = as.Date(Date_week), y = res_incidence)) +
+    ggplot(., aes(x = Date_week, y = res_incidence)) +
     geom_line() +
     facet_wrap(facets = vars(region), ncol = 4) +
     theme_bw() + 

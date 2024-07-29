@@ -23,7 +23,7 @@ plot_bd = bind_rows(
   bd_pmsi_hospital %>% mutate(setting = "Hospital"),
   bd_pmsi_icu %>% mutate(setting = "ICU")
 ) %>%
-  ggplot(., aes(x = as.Date(Date_week), y = nbjh)) +
+  ggplot(., aes(x = Date_week, y = nbjh)) +
   geom_rect(data = int_national_start_end, 
             aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
   geom_line() +
@@ -31,7 +31,7 @@ plot_bd = bind_rows(
   theme_bw() +
   theme(legend.position = "bottom",  
         legend.key = element_rect(colour = "black"),
-        legend.title.align = 0.5) +
+        legend.title = element_text(hjust = 0.5)) +
   guides(fill = guide_legend(title.position = "top")) +
   scale_fill_manual(
     name = "Anti-Covid-19 interventions",
@@ -59,7 +59,7 @@ zero_intub_covid = data.frame(
   
 
 plot_covid = bind_rows(zero_intub_covid, all_intubated_covid) %>%
-  ggplot(., aes(x = as.Date(Date_week), y = covid_intub)) +
+  ggplot(., aes(x = Date_week, y = covid_intub)) +
   geom_rect(data = int_national_start_end, 
             aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
   geom_line() +
