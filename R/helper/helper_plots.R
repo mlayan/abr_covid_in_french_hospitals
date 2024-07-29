@@ -64,9 +64,9 @@ atbplot = function(df, atbclass, level = "regional", facet_type = "geographic") 
     
     if (facet_type == "geographic") out = out + facet_geo(~ region, grid = my_regional_grid)
     if (facet_type == "alphabetical") out = out + facet_wrap(facets = vars(region), ncol = 4)
-    ggsave(paste0("plots/cons_atb/", tolower(gsub(" ", "", atbclass)), ".png"), 
-           out, 
-           height = 7, width = 10)
+    # ggsave(paste0("plots/cons_atb/", tolower(gsub(" ", "", atbclass)), ".png"), 
+    #        out, 
+    #        height = 7, width = 10)
     return(out)
   }
   
@@ -135,9 +135,9 @@ atbplot = function(df, atbclass, level = "regional", facet_type = "geographic") 
       labs(x = "", y = "Annual antibiotic consumption\n(DDD/1,000 bed days)", 
            title = atbclass)
 
-    ggsave(paste0("plots/cons_atb/type_", tolower(gsub(" ", "", atbclass)), ".png"), 
-           out, 
-           height = 7, width = 10)
+    # ggsave(paste0("plots/cons_atb/type_", tolower(gsub(" ", "", atbclass)), ".png"), 
+    #        out, 
+    #        height = 7, width = 10)
     return(out)
   }
  
@@ -177,8 +177,8 @@ atbplot = function(df, atbclass, level = "regional", facet_type = "geographic") 
       theme_bw() +
       labs(x = "", y = "Annual antibiotic consumption\n(DDD/1,000 hospitalisation days)", 
            title = atb_class)
-    ggsave(paste0("plots/cons_atb/", tolower(gsub(" ", "", atbclass)), ".png"), 
-           out, height = 4, width = 5)
+    # ggsave(paste0("plots/cons_atb/", tolower(gsub(" ", "", atbclass)), ".png"), 
+    #        out, height = 4, width = 5)
     return(out)
   }
 }

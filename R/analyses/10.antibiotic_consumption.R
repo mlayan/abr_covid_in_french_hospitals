@@ -108,30 +108,20 @@ consumption_icu %>%
 # Table 1 of national consumption of antibiotics
 # by molecular class 
 ##################################################
-# All classes of antibiotics
-atb_all_classes = atb %>%
-  filter(secteur %in% c("Hospital", "ICU"), atb_class != "Anti-MDR GNB") %>%
-  mutate(DCI = "") %>%
-  group_by(code, atb_class, secteur, DCI, Date_year, Nbhosp) %>%
-  summarise(molDDD = sum(molDDD), .groups = "drop")
-
-# Total antibiotic consumption
-atb_total2 = atb_total %>%
-  filter(secteur %in% c("Hospital", "ICU")) %>%
-  mutate(DCI = "") %>%
-  dplyr::select(-c(Nblits, type, region))
+atb_class_names2 = c("Aminoglycosides", "Carbapenems", "Imipenem + Meropenem", "Cephalosporins", 
+                     "Fosfomycin", "Glycopeptides", "Vancomycin", "Lipopeptides", "Macrolides", 
+                     "Azithromycin", "Monobactams", "Oxazolidinones", "Penicillins", "Polymyxins", 
+                     "Quinolones", "Tetracyclines", "Trimethoprim", "Total")
 
 # Hospital consumption
-national_2019_ref_year = atb %>%
-  filter(DCI %in% c("Vancomycine", "Imipenem", "Meropenem", "Azithromycine")) %>%
-  mutate(DCI = case_when(DCI %in% c("Imipenem", "Meropenem") ~ "Imipenem + Meropenem", 
-                         DCI == "Vancomycine" ~ "Vancomycin",
-                         DCI == "Azithromycine" ~ "Azithromycin"
-  )) %>%
-  group_by(code, atb_class, secteur, DCI, Date_year, Nbhosp) %>%
-  summarise(molDDD = sum(molDDD), .groups = "drop") %>%
-  bind_rows(., atb_all_classes, atb_total2) %>%
-  group_by(secteur, atb_class, DCI) %>%
+atb_use_hospital_level_agg = atb_use_hospital_level %>%
+  filter(atb_class %in% atb_class_names2) %>%
+  group_by(code, Date_year, atb_class) %>%
+  summarise(molDDD = sum(molDDD), Nbhosp = sum(Nbhosp), .groups = "drop") %>%
+  mutate(atb_class = factor(atb_class, atb_class_names2))
+
+national_2019_ref_year = atb_use_hospital_level_agg %>%
+  group_by(atb_class) %>%
   nest() %>%
   mutate(
     p_f = map(data, atbpval, level = "national"),
@@ -139,6 +129,7 @@ national_2019_ref_year = atb %>%
   ) %>%
   select(-data) %>%
   unnest(c(p_f, mul_comp)) %>%
+  ungroup() %>%
   mutate(
     comparison = paste0(group1, "vs", group2),
     conf_int = ifelse( -conf.low > -conf.high,
@@ -147,23 +138,17 @@ national_2019_ref_year = atb %>%
     ),
     estimate = -round(estimate, 2),
     p.adj = round(p.adj, 3),
-    p_f = round(p_f, 3),
-    atb_class = factor(atb_class, c("Aminoglycosides", "Carbapenems", "Cephalosporins", 
-                                    "Fosfomycin", "Glycopeptides", "Lipopeptides", 
-                                    "Macrolides", "Monobactams", "Penicillins", 
-                                    "Oxazolidinones", "Polymyxins", "Quinolones", 
-                                    "Tetracyclines", "Trimethoprim", "Total"))
+    p_f = round(p_f, 3)
   ) %>%
-  select(secteur, atb_class, DCI, p_f, comparison, estimate, conf_int, p.adj) %>%
+  select(atb_class, p_f, comparison, estimate, conf_int, p.adj) %>%
   pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
-  arrange(secteur, atb_class, DCI) %>%
-  mutate(atb_class = as.character(atb_class)) 
+  arrange(atb_class) %>%
+  mutate(atb_class = as.character(atb_class)) %>%
+  mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
+         .after = 1)
 
-
-# Hospital
-national_2019_ref_year %>%
-  filter(secteur == "Hospital") %>%
-  group_by(secteur) %>%
+# Hospital consumption table
+hospital_tab = national_2019_ref_year %>%
   gt(.) %>%
   tab_spanner(
     label = "2019 vs 2020",
@@ -208,7 +193,6 @@ national_2019_ref_year %>%
         rows = p.adj_2019vs2022 <= 0.05,
         columns = estimate_2019vs2022
       ),
-      cells_row_groups(), 
       cells_column_spanners(),
       cells_column_labels()
     )
@@ -226,14 +210,44 @@ national_2019_ref_year %>%
     columns = atb_class,
     rows = DCI != "",
     replacement = "",
-    pattern = "Carbapenems|Glycopeptides|Macrolides"
-  ) %>%
-  gtsave(filename = "../Paper/Tables/national_hospital.png", vwidth = 1500)
+    pattern = "Imipenem \\+ Meropenem|Azithromycin|Vancomycin"
+  )
+gtsave(hospital_tab, filename = "../Paper/Tables/national_hospital.docx")
+gtsave(hospital_tab, filename = "tables/Table2.docx")
 
-# Hospital
-national_2019_ref_year %>%
-  filter(secteur == "ICU") %>%
-  group_by(secteur) %>%
+
+# ICU consumption
+icu_2019_ref_year = atb_use_hospital_level %>%
+  filter(secteur == "ICU", code %in% icu_cohort_final, atb_class %in% atb_class_names2) %>%
+  mutate(atb_class = factor(atb_class, atb_class_names2)) %>%
+  group_by(atb_class) %>%
+  nest() %>%
+  mutate(
+    p_f = map(data, atbpval, level = "national"),
+    mul_comp = map(data, atbmulcomp, level = "national")
+  ) %>%
+  select(-data) %>%
+  unnest(c(p_f, mul_comp)) %>%
+  ungroup() %>%
+  mutate(
+    comparison = paste0(group1, "vs", group2),
+    conf_int = ifelse( -conf.low > -conf.high,
+                       paste0("(", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
+                       paste0("(", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
+    ),
+    estimate = -round(estimate, 2),
+    p.adj = round(p.adj, 3),
+    p_f = round(p_f, 3)
+  ) %>%
+  select(atb_class, p_f, comparison, estimate, conf_int, p.adj) %>%
+  pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
+  arrange(atb_class) %>%
+  mutate(atb_class = as.character(atb_class)) %>%
+  mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
+         .after = 1)
+
+# ICU
+icu_tab = icu_2019_ref_year %>%
   gt(.) %>%
   tab_spanner(
     label = "2019 vs 2020",
@@ -278,7 +292,6 @@ national_2019_ref_year %>%
         rows = p.adj_2019vs2022 <= 0.05,
         columns = estimate_2019vs2022
       ),
-      cells_row_groups(), 
       cells_column_spanners(),
       cells_column_labels()
     )
@@ -296,9 +309,10 @@ national_2019_ref_year %>%
     columns = atb_class,
     rows = DCI != "",
     replacement = "",
-    pattern = "Carbapenems|Glycopeptides|Macrolides"
-  ) %>%
-  gtsave(filename = "../Paper/Tables/national_icu.png", vwidth = 1500)
+    pattern = "Imipenem \\+ Meropenem|Vancomycin|Azithromycin"
+  ) 
+gtsave(icu_tab, filename = "../Paper/Tables/national_icu.docx", vwidth = 1500)
+gtsave(icu_tab, filename = "tables/Table3.docx", vwidth = 1500)
 
 # # Verify that estimates correspond to the median of the differences
 # k = atb %>%
@@ -323,14 +337,12 @@ national_2019_ref_year %>%
 # median(k$`2019`-k$`2020`)
 
 ##################################################
-# Figure 4
+# Figure 7
 ##################################################
-# Changes from 2019 for antibiotic classes
-to_add = atb %>%
-  filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
-  group_by(atb_class, code, Date_year, region, Nbhosp) %>%
-  summarise(molDDD = sum(molDDD), .groups = "drop") %>%
-  bind_rows(., atb_total %>% filter(secteur == "Hospital") %>% dplyr::select(atb_class, code, Date_year, region, Nbhosp, molDDD)) %>%
+# Changes from 2019 for specific antibiotic classes
+to_add = atb_use_hospital_level %>%
+  group_by(atb_class, code, Date_year, region) %>%
+  summarise(molDDD = sum(molDDD), Nbhosp = sum(Nbhosp), .groups = "drop") %>%
   mutate(region = recode(region, !!!dict_regions)) %>%
   group_by(atb_class, region) %>%
   nest() %>%
@@ -349,11 +361,13 @@ france_region = france %>%
   select(region, geometry) %>%
   mutate(region = recode(region, !!!dict_regions)) %>%
   right_join(., to_add, by = "region") %>%
-  filter(!atb_class %in% c("Lipopeptides", "Monobactams", "Fosfomycin", "Polymyxins")) %>%
+  filter(!atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin", 
+                           "Lipopeptides", "Monobactams", "Polymyxins",
+                           "Third generation Cephalosporins")) %>%
   mutate(atb_class = factor(
     ifelse(atb_class == "Trimethoprim", "Trimethoprim and\nsulfanomides", atb_class),
-    c("Aminoglycosides", "Carbapenems", "Cephalosporins", "Glycopeptides", 
-      "Macrolides", "Penicillins", "Oxazolidinones", "Quinolones", "Tetracyclines", 
+    c("Aminoglycosides", "Carbapenems", "Cephalosporins", "Fosfomycin", "Glycopeptides",
+      "Macrolides", "Oxazolidinones", "Penicillins", "Quinolones", "Tetracyclines",
       "Trimethoprim and\nsulfanomides", "Total"))
   )
 
@@ -373,16 +387,19 @@ p1 = ggplot() +
     axis.text = element_text(size = 8)
     ) +
   labs(x = "", y = "", fill = "Median relative %\nchange 2019-2020")
-# p1
+p1
 
-# Azithromycin
-df = atb %>%
-  filter(secteur == "Hospital", DCI == "Azithromycine") %>%
+# Regional changes in azithromycin use at the hospital level
+df = atb_use_hospital_level %>%
+  filter(atb_class == "Azithromycin") %>%
+  group_by(code, Date_year, atb_class, region) %>%
+  summarise(molDDD = sum(molDDD), Nbhosp = sum(Nbhosp), .groups = "drop") %>%
   mutate(region = recode(region, !!!dict_regions))
+
 p2 = atbplot(df, "", level = "regional", facet_type = "alphabetical") +
   labs(y = "Annual azithromycin consumption\n(DDD/1,000 bed days)") +
   theme(plot.title = element_blank(), axis.title.x = element_blank())
-ggsave("../Paper/Figures/Figure4B.png", p2, height = 7, width = 8)
+# ggsave("../Paper/Figures/Figure4B.png", p2, height = 7, width = 8)
   
 # Small map of France with abbreviated names of regions
 p3 = france %>%
@@ -396,13 +413,14 @@ p3 = france %>%
         plot.margin = unit(c(0, 0, 0, 0), "cm")) 
 
 # Final figure
-figure4 = ggarrange(
+figure7 = ggarrange(
   p1,
   ggarrange(p2, p3, ncol = 2, widths = c(1,0.5)),
   nrow = 2, heights = c(1,0.7), labels = c("A", "B")
   )
-# figure4
-ggsave("../Paper/Figures/Figure4.png", figure4, height = 11, width = 9)
+figure7
+ggsave("../Paper/Figures/Figure7.png", figure7, height = 11, width = 9)
+ggsave("plots/Figure7.png", figure7, height = 11, width = 9)
 
 ##################################################
 # Supplementary plot of absolute change between 
@@ -419,25 +437,25 @@ p_legend = ggplot() +
   labs(x = "", y = "", fill = "")
 
 # Changes from 2019 for antibiotic classes
+atb_class_new_names = c("Aminoglycosides", "Carbapenems", "Cephalosporins", "Fosfomycin", 
+                        "Glycopeptides", "Lipopeptides", "Macrolides", "Monobactams", 
+                        "Oxazolidinones", "Penicillins", "Polymyxins", 
+                        "Quinolones", "Tetracyclines", "Trimethoprim and\nsulfanomides", "Total")
 france_region = france %>%
   select(region, geometry) %>%
   mutate(region = recode(region, !!!dict_regions)) %>%
   right_join(., to_add, by = "region") %>%
   mutate(atb_class = factor(
     ifelse(atb_class == "Trimethoprim", "Trimethoprim and\nsulfanomides", atb_class),
-    c("Aminoglycosides", "Carbapenems", "Cephalosporins", "Fosfomycin", 
-      "Glycopeptides", "Lipopeptides", "Macrolides", "Monobactams", 
-      "Penicillins", "Oxazolidinones", "Polymyxins", 
-      "Quinolones", "Tetracyclines", "Trimethoprim and\nsulfanomides", "Total"))
+    atb_class_new_names)
   )
 
 # Get all plots separately
-atb_classes = unique(france_region$atb_class)
-all_plots = vector("list", length(atb_classes))
-for (a in seq_along(atb_classes)) {
+all_plots = vector("list", length(atb_class_new_names))
+for (a in seq_along(atb_class_new_names)) {
   all_plots[[a]] = ggplot() +
-    geom_sf(data = france_region[france_region$atb_class==atb_classes[a], ], aes(fill = -estimate)) +
-    stat_sf_coordinates(data = subset(france_region, !is.na(p) & atb_class == atb_classes[a]), aes(size = p), fill = "white", col = "black", shape=21) +
+    geom_sf(data = france_region[france_region$atb_class==atb_class_new_names[a], ], aes(fill = -estimate)) +
+    stat_sf_coordinates(data = subset(france_region, !is.na(p) & atb_class == atb_class_new_names[a]), aes(size = p), fill = "white", col = "black", shape=21) +
     scale_fill_gradient2(high = "orange", mid = "ivory", low = "deepskyblue4") +
     scale_size_manual(
       "",
@@ -465,64 +483,59 @@ supp_fig
 ggsave("../Paper/Supplementary/antibiotic_consumption_regions.png", 
        supp_fig, height = 8, width = 10)
 
-
-
 ##################################################
 # Table of multiple comparisons at the regional
 # level for all antibiotic classes
 ##################################################
-# Paired Wilcoxon tests for Total consumption
-total_atb_regional = atb %>%
-  filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
-  group_by(code, Date_year, region) %>%
-  summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop") %>%
-  arrange(region, code, Date_year) %>%
-  group_by(region) %>%
-  wilcox_test(
-    consumption ~ Date_year,
-    comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
-    paired = T, 
-    p.adjust.method = "bonferroni", 
-    alternative = "two.sided",
-    conf.level = 1-0.05/3,
-    detailed = T
-  ) %>%
-  mutate(atb_class = "Total")
-
-# Final table of paired Wilcoxon test results for multiple comparisons 
-atb %>%
-  filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
-  group_by(code, Date_year, atb_class, region) %>%
-  summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop") %>%
-  arrange(atb_class, region, code, Date_year) %>%
-  group_by(atb_class, region) %>%
-  wilcox_test(
-    consumption ~ Date_year, 
-    comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
-    paired = T, 
-    p.adjust.method = "bonferroni", 
-    alternative = "two.sided",
-    conf.level = 1-0.05/3,
-    detailed = T
-  ) %>%
-  bind_rows(., anti_mdr_regional, total_atb_regional) %>%
-  mutate(
-    comparison = paste0(group1, "vs", group2),
-    conf_int = ifelse( -conf.low > -conf.high,
-                       paste0("(", -round(conf.high, 2), ", ", -round(conf.low,2), ")"),
-                       paste0("(", -round(conf.low, 2), ", ", -round(conf.high,2), ")")
-    ),
-    estimate = -round(estimate, 2),
-    p.adj = round(p.adj, 4)
-  ) %>%
-  select(atb_class, region, comparison, estimate, conf_int, p.adj) %>%
-  filter(comparison %in% c("2019vs2020", "2019vs2021", "2019vs2022")) %>%
-  pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
-  dplyr::select(atb_class, region, 
-                estimate_2019vs2020, conf_int_2019vs2020, p.adj_2019vs2020,
-                estimate_2019vs2021, conf_int_2019vs2021, p.adj_2019vs2021,
-                estimate_2019vs2022, conf_int_2019vs2022, p.adj_2019vs2022) %>%
-  write.csv(., "../Paper/Supplementary/antibiotic_consumption_hospitals_regional_heterogeneity.csv", row.names = F)
-
-
-
+# # Paired Wilcoxon tests for Total consumption
+# total_atb_regional = atb %>%
+#   filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
+#   group_by(code, Date_year, region) %>%
+#   summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop") %>%
+#   arrange(region, code, Date_year) %>%
+#   group_by(region) %>%
+#   wilcox_test(
+#     consumption ~ Date_year,
+#     comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
+#     paired = T, 
+#     p.adjust.method = "bonferroni", 
+#     alternative = "two.sided",
+#     conf.level = 1-0.05/3,
+#     detailed = T
+#   ) %>%
+#   mutate(atb_class = "Total")
+# 
+# # Final table of paired Wilcoxon test results for multiple comparisons 
+# atb %>%
+#   filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
+#   group_by(code, Date_year, atb_class, region) %>%
+#   summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop") %>%
+#   arrange(atb_class, region, code, Date_year) %>%
+#   group_by(atb_class, region) %>%
+#   wilcox_test(
+#     consumption ~ Date_year, 
+#     comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
+#     paired = T, 
+#     p.adjust.method = "bonferroni", 
+#     alternative = "two.sided",
+#     conf.level = 1-0.05/3,
+#     detailed = T
+#   ) %>%
+#   bind_rows(., anti_mdr_regional, total_atb_regional) %>%
+#   mutate(
+#     comparison = paste0(group1, "vs", group2),
+#     conf_int = ifelse( -conf.low > -conf.high,
+#                        paste0("(", -round(conf.high, 2), ", ", -round(conf.low,2), ")"),
+#                        paste0("(", -round(conf.low, 2), ", ", -round(conf.high,2), ")")
+#     ),
+#     estimate = -round(estimate, 2),
+#     p.adj = round(p.adj, 4)
+#   ) %>%
+#   select(atb_class, region, comparison, estimate, conf_int, p.adj) %>%
+#   filter(comparison %in% c("2019vs2020", "2019vs2021", "2019vs2022")) %>%
+#   pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
+#   dplyr::select(atb_class, region, 
+#                 estimate_2019vs2020, conf_int_2019vs2020, p.adj_2019vs2020,
+#                 estimate_2019vs2021, conf_int_2019vs2021, p.adj_2019vs2021,
+#                 estimate_2019vs2022, conf_int_2019vs2022, p.adj_2019vs2022) %>%
+#   write.csv(., "../Paper/Supplementary/antibiotic_consumption_hospitals_regional_heterogeneity.csv", row.names = F)
