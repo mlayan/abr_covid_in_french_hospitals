@@ -7,10 +7,10 @@ library(gt)
 library(rstatix)
 library(DescTools)
 library(readxl)
-library(factoextra)
+# library(factoextra)
 library(ggpubr)
 library(cowplot)
-library(ggsignif)
+# library(ggsignif)
 library(sf)
 
 source("R/helper/dictionaries.R")
@@ -314,28 +314,6 @@ icu_tab = icu_2019_ref_year %>%
 gtsave(icu_tab, filename = "../Paper/Tables/national_icu.docx", vwidth = 1500)
 gtsave(icu_tab, filename = "tables/Table3.docx", vwidth = 1500)
 
-# # Verify that estimates correspond to the median of the differences
-# k = atb %>%
-#   filter(
-#     secteur %in% c("Total établissement", "Réanimation"), 
-#     DCI %in% c("Vancomycine", "Imipenem", "Meropenem", "Azithromycine") 
-#   ) %>%
-#   mutate(DCI = case_when(DCI %in% c("Imipenem", "Meropenem") ~ "Imipenem + Meropenem", 
-#                          DCI == "Vancomycine" ~ "Vancomycin",
-#                          DCI == "Azithromycine" ~ "Azythromycin"
-#   )) %>%
-#   group_by(code, atb_class, secteur, DCI, Date_year, Nbhosp) %>%
-#   summarise(molDDD = sum(molDDD), .groups = "drop") %>%
-#   bind_rows(., atb_total, atb_all_classes) %>%
-#   filter(atb_class == "Aminoglycosides", secteur == "Total établissement", Date_year <= 2020) %>%
-#   mutate(consumption = molDDD/Nbhosp*1000) %>%
-#   dplyr::select(-Nbhosp, -molDDD) %>%
-#   pivot_wider(names_from = Date_year, values_from = consumption)
-# 
-# wilcox.test(k$`2019`, k$`2020`, paired = T, conf.int = T)
-# median(sort(outer(k$`2019`, k$ `2020`, "-")))
-# median(k$`2019`-k$`2020`)
-
 ##################################################
 # Figure 7
 ##################################################
@@ -470,7 +448,7 @@ for (a in seq_along(atb_class_new_names)) {
       plot.title = element_text(hjust = 0.5, size = 10, vjust = 0),
       plot.margin = margin(t=0, r=0, b=0, l=0),
     ) +
-    labs(x = "", y = "", fill = "", title = atb_classes[a])
+    labs(x = "", y = "", fill = "", title = atb_class_new_names[a])
 }
 
 supp_fig = plot_grid(
@@ -481,6 +459,8 @@ supp_fig = plot_grid(
   )
 supp_fig
 ggsave("../Paper/Supplementary/antibiotic_consumption_regions.png", 
+       supp_fig, height = 8, width = 10)
+ggsave("plots/antibiotic_use/antibiotic_consumption_regions.png", 
        supp_fig, height = 8, width = 10)
 
 ##################################################
