@@ -855,12 +855,19 @@ for (db in c("icu", "hospital")) {
         lead2_covid_intub_prev = lead(covid_intub_prev,2),
         lead3_covid_intub_prev = lead(covid_intub_prev,3),
         
+        lag1_covid_intub_prev = lag(covid_intub_prev), 
+        lag2_covid_intub_prev = lag(covid_intub_prev, 2),
+        
         nbjh = nbjh/1000
       ) %>% 
-      filter(!is.na(lead2_covid_intub_prev), !is.na(lag1_i_res)) %>%
+      filter(!is.na(lag2_covid_intub_prev), !is.na(lead3_covid_intub_prev)) %>%
       mutate(
         Carbapenems = (Carbapenems - mean(Carbapenems)) / sd(Carbapenems),
         lag1_i_res = (lag1_i_res - mean(lag1_i_res)) / sd(lag1_i_res),
+        
+        covid_intub_prev = (covid_intub_prev -mean(covid_intub_prev))/sd(covid_intub_prev),
+        lag1_covid_intub_prev = (lag1_covid_intub_prev -mean(lag1_covid_intub_prev))/sd(lag1_covid_intub_prev),
+        lag2_covid_intub_prev = (lag2_covid_intub_prev -mean(lag2_covid_intub_prev))/sd(lag2_covid_intub_prev),
         
         lead1_covid_intub_prev = (lead1_covid_intub_prev - mean(lead1_covid_intub_prev)) / sd(lead1_covid_intub_prev),
         lead2_covid_intub_prev = (lead2_covid_intub_prev - mean(lead2_covid_intub_prev)) / sd(lead2_covid_intub_prev),
@@ -881,12 +888,13 @@ for (db in c("icu", "hospital")) {
     }
     
     # m1 = glm.nb(n_res ~ lag1_i_res + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    # m2 = glm.nb(n_res ~ lag1_i_res + lead1_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    # m3 = glm.nb(n_res ~ lag1_i_res + lead2_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    # m4 = glm.nb(n_res ~ lag1_i_res + lead3_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
-    # m5 = glm.nb(n_res ~ lag1_i_res + lag2_nintub + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m2 = glm.nb(n_res ~ lag1_i_res + lead1_covid_intub_prev + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m3 = glm.nb(n_res ~ lag1_i_res + lead2_covid_intub_prev + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m4 = glm.nb(n_res ~ lag1_i_res + lead3_covid_intub_prev + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
+    # m5 = glm.nb(n_res ~ lag1_i_res + lag2_covid_intub_prev + Carbapenems + offset(log(nbjh)), data = final_db, link = log)
     # anova(m1, m2, m3, m4, m5)
-    m = glm.nb(m, data=final_db, link=log)
+    
+    m = glm.nb(m_eq, data=final_db, link=log)
     
     # AIC
     all_aic = bind_rows(all_aic, data.frame(
@@ -923,6 +931,10 @@ p1=bind_rows(
     inner_join(., best_models, by = c("bacteria", "model", "setting")) %>%
     dplyr::select(model, bacteria, setting, aic) %>%
     mutate(model = "best_model"),
+  results %>%
+    filter(model == "model0") %>%
+    dplyr::select(model, bacteria, setting, aic) %>%
+    mutate(model = "Baseline model"),
   all_aic
   ) %>%
   filter(bacteria == "CR P. aeruginosa") %>%
@@ -932,7 +944,9 @@ p1=bind_rows(
     setting = ifelse(setting == "icu", "ICU", "Hospital"),
     model = recode(model, !!!c("best_model" = "Covid intubation w-2 (best model)", 
                                "model7" = "Covid intubation w+1",
-                               "model8" = "Covid intubation w+2"))
+                               "model8" = "Covid intubation w+2",
+                               "model9" = "Covid intubation w+3"
+                               ))
     ) %>%
   arrange(setting) %>%
   rename(Setting = setting, Model = model, AIC = aic) %>%
@@ -940,16 +954,16 @@ p1=bind_rows(
 
 # Estimates
 p2=all_estimates_leads %>%
-  filter(variable != "(Intercept)") %>%
+  filter(!variable %in% c("(Intercept)", "Carbapenems", "lag1_i_res")) %>%
   mutate(
     setting = ifelse(setting == "icu", "ICU", "Hospital"),
-    model = ifelse(model == "model7", "Covid-19 intubation w+1", "Covid-19 intubation w+2"),
-    variable = recode(variable, !!!c("lag1_i_res" = "Incidence w-1", "lead1_nintub" = "Covid-19 intubation", "lead2_nintub" = "Covid-19 intubation"))
+    variable = case_when(model == "model7" ~ "Covid-19 intubation w+1", 
+                      model == "model8" ~ "Covid-19 intubation w+2",
+                      model == "model9" ~ "Covid-19 intubation w+3")
   ) %>%
   ggplot(., aes(x = variable, y = exp(Estimate), ymin = exp(q2_5), ymax = exp(q97_5), col = setting)) +
   geom_hline(yintercept = 1) +
   geom_pointrange(position = position_dodge(width = 0.5)) +
-  facet_grid(cols = vars(model)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   labs(x = "", y = "IRRs (95% CI)", col = "")
@@ -962,7 +976,10 @@ p3=all_fits %>%
   bind_rows(., all_fits_leads) %>%
   mutate(
     setting = ifelse(setting == "icu", "ICU", "Hospital"),
-    model = recode(model, !!!c("model6" = "Covid-19 intubation w-2\n(best model)", "model7" = "Covid-19 intubation w+1", "model8" = "Covid-19 intubation w+2"))
+    model = recode(model, !!!c("model6" = "Covid-19 intub. w-2\n(best model)", 
+                               "model7" = "Covid-19 intub. w+1", 
+                               "model8" = "Covid-19 intub. w+2",
+                               "model9" = "Covid-19 intub. w+3"))
   ) %>%
   ggplot(., aes(x = Date_week)) +
   facet_grid(cols = vars(setting), rows = vars(model)) +
@@ -977,9 +994,11 @@ p3=all_fits %>%
 # Final Supplementary figure 
 fig = plot_grid(
   plot_grid(
-    p1, p2, ncol = 2, labels = c("A", "B"), rel_widths = c(0.6, 1)
+    p1, p2, ncol = 2, labels = c("A", "B")#, rel_widths = c(0.6, 1)
     ),
-  p3, nrow = 2, rel_heights = c(0.6,1), labels = c("", "C")
+  p3, nrow = 2, rel_heights = c(0.5,1), labels = c("", "C")
 )
-ggsave("../Paper/Supplementary/crpa_leads.png", fig, height = 8, width = 8)
+fig
+ggsave("../Paper/Supplementary/crpa_leads.png", fig, height = 9, width = 8)
+ggsave("plots/regressions/crpa_leads.png", fig, height = 9, width = 8)
 

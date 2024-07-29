@@ -68,6 +68,7 @@ data/icu_cohort19202122.rda
 data/metadata_admin.rda
 data/metadata_admin_espic.rda
 data/metadata_beds.rda
+data/atb_use_hospital_level.rda
 
 # Additional analyses
 R/analyses/others/
