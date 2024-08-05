@@ -7,10 +7,8 @@ library(gt)
 library(rstatix)
 library(DescTools)
 library(readxl)
-# library(factoextra)
 library(ggpubr)
 library(cowplot)
-# library(ggsignif)
 library(sf)
 
 source("R/helper/dictionaries.R")
@@ -449,6 +447,8 @@ for (a in seq_along(atb_class_new_names)) {
       plot.margin = margin(t=0, r=0, b=0, l=0),
     ) +
     labs(x = "", y = "", fill = "", title = atb_class_new_names[a])
+  
+  ggsave(paste0("plots/antibiotic_use/", atb_class_names[a], ".png"), all_plots[[a]], width = 3.5, height = 3.5)
 }
 
 supp_fig = plot_grid(
