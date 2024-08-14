@@ -29,7 +29,7 @@ load("data/icu_cohort_final.rda")
 load("data/atb_use_hospital_level.rda")
 
 ##################################################
-# Plot raw data
+# Plot raw data - Figure 3
 ##################################################
 atb_class_names = c("Aminoglycosides", "Carbapenems", "Cephalosporins", "Fosfomycin", 
                     "Glycopeptides", "Lipopeptides", "Macrolides", "Monobactams", 
@@ -85,10 +85,10 @@ p2 = ggplot(consumption_icu, aes(x = Date_year, y = consumption, group = code)) 
        title = "ICUs")
 
 # Final figure 
-figure6 = ggarrange(p1, p2, nrow = 2, labels = c("A", "B"))
-figure6
-ggsave("../Paper/Figures/Figure6.png", figure6, height = 10, width = 10)
-ggsave("plots/Figure6.png", figure6, height = 10, width = 10)
+figure3 = ggarrange(p1, p2, nrow = 2, labels = c("A", "B"))
+figure3
+ggsave("../Paper/Figures/Figure3.png", figure3, height = 10, width = 10)
+ggsave("plots/Figure3.png", figure3, height = 10, width = 10)
 
 # All hospitals reported antibiotic consumption by class every year
 consumption_hospital %>%
@@ -313,7 +313,7 @@ gtsave(icu_tab, filename = "../Paper/Tables/national_icu.docx", vwidth = 1500)
 gtsave(icu_tab, filename = "tables/Table3.docx", vwidth = 1500)
 
 ##################################################
-# Figure 7
+# Plot regional changes - Figure 4
 ##################################################
 # Changes from 2019 for specific antibiotic classes
 to_add = atb_use_hospital_level %>%
@@ -373,7 +373,7 @@ df = atb_use_hospital_level %>%
   mutate(region = recode(region, !!!dict_regions))
 
 p2 = atbplot(df, "", level = "regional", facet_type = "alphabetical") +
-  labs(y = "Annual azithromycin consumption\n(DDD/1,000 bed days)") +
+  labs(y = "Annual azithromycin consumption\n(DDD/1,000 bed-days)") +
   theme(plot.title = element_blank(), axis.title.x = element_blank())
 # ggsave("../Paper/Figures/Figure4B.png", p2, height = 7, width = 8)
   
@@ -389,14 +389,14 @@ p3 = france %>%
         plot.margin = unit(c(0, 0, 0, 0), "cm")) 
 
 # Final figure
-figure7 = ggarrange(
+figure4 = ggarrange(
   p1,
   ggarrange(p2, p3, ncol = 2, widths = c(1,0.5)),
   nrow = 2, heights = c(1,0.7), labels = c("A", "B")
   )
-figure7
-ggsave("../Paper/Figures/Figure7.png", figure7, height = 11, width = 9)
-ggsave("plots/Figure7.png", figure7, height = 11, width = 9)
+figure4
+ggsave("../Paper/Figures/Figure4.png", figure4, height = 11, width = 9)
+ggsave("plots/Figure4.png", figure4, height = 11, width = 9)
 
 ##################################################
 # Supplementary plot of absolute change between 

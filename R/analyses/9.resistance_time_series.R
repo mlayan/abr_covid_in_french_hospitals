@@ -43,7 +43,7 @@ ggplot(resistance_prop, aes(x = Date_week, y = res_rate, ymin = res_rate_lwr, ym
   geom_line() +
   facet_grid(rows = vars(bacterie), cols = vars(setting), scales = "free_y") +
   scale_fill_manual(
-    name = "Anti-Covid-19 interventions",
+    name = "Anti-COVID-19 interventions",
     labels = c("First wave", "Strong", "Intermediary", "Light to none"),
     breaks = c("p_first_wave", "p_strong_res", "p_mild_res", "p_no_res"),
     values = c("p_first_wave" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
@@ -92,6 +92,48 @@ plot_res_p = res_hospital %>%
   theme(legend.position = "right", axis.text.x = element_text(angle = 30, hjust = 1)) +
   labs(x = "", y = "Annual proportion of\nresistant infections", fill = "")
 
+# Cochrane-Armitage tests for trends
+prop_test_trend_df = function(df) {
+  df$var = (df$n_res / df$n_tot) * (1-(df$n_res / df$n_tot)) / df$n_tot
+  out = prop.trend.test(df$n_res, df$n_tot)
+  out = as.data.frame(out[c("statistic", "p.value")])
+  rownames(out) = NULL
+  s = lm(n_res/n_tot ~ Date_year, data = df, weights = df$var)
+  out$slope = coef(s)[["Date_year"]]*100
+  out$slope_lw = confint(s)["Date_year", "2.5 %"]*100
+  out$slope_up = confint(s)["Date_year", "97.5 %"]*100
+  return(out)
+}
+
+plot_trends = res_hospital %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
+  group_by(Date_year, bacterie) %>%
+  summarise(n_res = sum(n_res), n_tot = sum(n_tot), .groups = "drop") %>%
+  group_by(bacterie) %>%
+  nest() %>%
+  mutate(out = map(data, prop_test_trend_df)) %>%
+  dplyr::select(-data) %>%
+  unnest(out) %>%
+  ungroup() %>%
+  mutate(
+    yaxis = "Trend",
+    p_stars = case_when(p.value > 0.05 ~ "NS",
+                        p.value <= 0.05 & p.value > 0.01 ~ "*",
+                        p.value <= 0.01 & p.value > 0.001 ~ "**",
+                        p.value <= 0.001 ~ "***")
+      ) %>%
+  ggplot(., aes(x = bacterie, y = yaxis, fill = slope, label = p_stars)) +
+  geom_tile() +
+  geom_text(color = "gray100") +
+  scale_fill_gradient2(low = "cornflowerblue", mid = "white", high = "red") +
+  theme_bw() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1),
+        axis.title.x = element_blank(),
+        legend.position = "bottom",
+        plot.margin = margin(5.5, 5.5, 5.5, 10, "pt")) +
+  labs(y = "", fill = "Temporal trend (%)")
+
 # Temporal dynamics of weekly incidence rates 
 bd_all = bind_rows(
   bd_pmsi_hospital %>% mutate(setting = "Hospital"),
@@ -112,7 +154,7 @@ plot_res_i = bind_rows(
   theme_bw() +
   theme(legend.position = "bottom", legend.title = element_text(hjust = 0.5)) +
   scale_fill_manual(
-    name = "Anti-Covid-19 interventions",
+    name = "Anti-COVID-19 interventions",
     labels = c("First wave", "Strong", "Intermediary", "Light to none"),
     breaks = c("p_first_wave", "p_strong_res", "p_mild_res", "p_no_res"),
     values = c("p_first_wave" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
@@ -123,16 +165,16 @@ plot_res_i = bind_rows(
 ggsave("plots/antibiotic_resistance/national_weekly_incidence.png", plot_res_i, height = 6, width = 12)
 
 # Final figure
-figure3 = ggarrange(
-  ggarrange(tab_tot, plot_res_p, nrow = 2, heights = c(1, 0.8), labels = c("A", "B")), 
+figure5 = ggarrange(
+  ggarrange(tab_tot, plot_res_p, plot_trends, nrow = 3, heights = c(0.5, 1, 0.7), labels = c("A", "B", "C")), 
   plot_res_i,
   ncol = 2,
-  labels = c("", 'C'),
+  labels = c("", 'D'),
   widths = c(0.6,1)
 )
-figure3
-ggsave("plots/Figure3.png", figure3, height = 8, width = 12)
-ggsave("../Paper/Figures/Figure3.png", figure3, height = 8, width = 12)
+figure5
+ggsave("plots/Figure5.png", figure5, height = 8, width = 12)
+ggsave("../Paper/Figures/Figure5.png", figure5, height = 8, width = 12)
 
 ##################################################
 # Comparison with annual incidence rate reported

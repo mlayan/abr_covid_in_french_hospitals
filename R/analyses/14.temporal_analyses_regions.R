@@ -234,6 +234,13 @@ for (r in regions) {
 results %>%
   filter(poisson_OD > 0.05)
 
+# P-values COVID-19-related variable
+all_estimates %>%
+  filter(variable == "lag2_covid_intub_prev",
+         region %in% c("Auvergne-Rhône-Alpes", "Grand-Est", "Provence-Alpes-Côte d'Azur", "Île-de-France")) %>%
+  dplyr::select(region, Estimate, q2_5, q97_5, p)
+
+
 ##################################################
 # Final plot
 ##################################################
@@ -257,13 +264,13 @@ model6_estimates = all_estimates %>%
   labs(x = "", y = "Incidence rate ratio\n(95% CI)") +
   ylim(c(0.55, 1.55))
 
-# Save figure 5
-figure5 = plot_grid(
+# Save figure 7
+figure7 = plot_grid(
   plot_grid(model6_estimates, ggplot()+theme_void(), ncol = 2, rel_widths = c(1, 0.2), labels = c("A", "")), 
   p_covid,
   nrow = 2
 )
-figure5
-ggsave("../Paper/Figures/Figure5.png", figure5, height = 8, width = 6)
-ggsave("plots/Figure5.png", figure5, height = 8, width = 6)
+figure7
+ggsave("../Paper/Figures/Figure7.png", figure7, height = 8, width = 6)
+ggsave("plots/Figure7.png", figure7, height = 8, width = 6)
 
