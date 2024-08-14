@@ -700,6 +700,17 @@ gtsave(ljung_box_tab, "tables/national_box_ljung.docx")
 save(best_models, file = "data/best_models.rda")
 
 # Metrics for the abstract
+all_estimates %>% 
+  filter(bacteria == "CR P. aeruginosa", model == "model6", variable == "lag2_covid_intub_prev") %>%
+  dplyr::select(bacteria, model, variable, setting, p)
+
+all_estimates %>%
+  filter(bacteria %in% c("MRSA", "ESBL E. coli"), model == "model1", grepl("periods", variable),
+         exp(q97_5) < 1) %>%
+  dplyr::select(bacteria, model, variable, setting, Estimate, q2_5, q97_5) %>%
+  arrange(bacteria, setting) %>%
+  mutate(Estimate = round(1-exp(Estimate),2), q2_5 = round(1-exp(q2_5),2), 
+         q97_5 = round(1-exp(q97_5), 2))
 
 ##################################################
 # Sensitivity analysis

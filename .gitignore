@@ -86,8 +86,8 @@ R/analyses/4.cohort_representativity.R
 R/analyses/5.save_aggregated_data.R
 R/analyses/6.interventions.R
 R/analyses/7.intubation_data.R
-R/analyses/15.enterococci.R
-R/analyses/16.enterococci_time_series.R
+R/analyses/16.enterococci.R
+R/analyses/17.enterococci_time_series.R
 
 # Plots
 plots/atlas/
