@@ -316,6 +316,7 @@ best_models = data.frame(
 
 # Table of AIC
 aic_tab = results %>%
+  filter(setting != "not icu") %>%
   mutate(
     setting = ifelse(setting == "icu", "ICU", "Hospital"),
     aic = round(aic),
@@ -366,21 +367,21 @@ results %>%
   theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   labs(x = "", y = "Dispersion parameter (95% Wald CI)", col = "")
 
-# Verify normality of residuals
-sw_p_df = all_residuals %>%
-  inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
-  group_by(setting, bacteria) %>%
-  summarise(p = round(shapiro.test(residuals)$p.value, 4), .groups = "drop")
-  
-all_residuals %>%
-  inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
-  ggplot(., aes(sample = residuals)) +
-  qqplotr::stat_qq_band(bandType = "boot", mapping = aes(fill = "Bootstrap"), alpha = 0.5, fill = "grey80") +
-  stat_qq_line() +
-  stat_qq() +
-  geom_text(data = sw_p_df, aes(sample = NULL, label = p, x = 0, y = 2)) +
-  facet_grid(cols = vars(setting), rows = vars(bacteria)) +
-  theme_bw()
+# # Verify normality of residuals
+# sw_p_df = all_residuals %>%
+#   inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
+#   group_by(setting, bacteria) %>%
+#   summarise(p = round(shapiro.test(residuals)$p.value, 4), .groups = "drop")
+#   
+# all_residuals %>%
+#   inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
+#   ggplot(., aes(sample = residuals)) +
+#   qqplotr::stat_qq_band(bandType = "boot", mapping = aes(fill = "Bootstrap"), alpha = 0.5, fill = "grey80") +
+#   stat_qq_line() +
+#   stat_qq() +
+#   geom_text(data = sw_p_df, aes(sample = NULL, label = p, x = 0, y = 2)) +
+#   facet_grid(cols = vars(setting), rows = vars(bacteria)) +
+#   theme_bw()
 
 # Verify absence of autocorrelation
 par(mfrow = c(n_bacterias,2))
@@ -399,13 +400,13 @@ for (i in 1:nrow(best_models)) {
 }
 
 # Verify absence of multi-colinearity
-best_models_vifs = all_vif[which(apply(results[, c("model", "bacteria", "setting")], 1, paste0, collapse = "_") %in% 
-          apply(best_models, 1, paste0, collapse = "_"))]
-
-names(best_models_vifs) = apply(results[, c("model", "bacteria", "setting")], 1, paste0, collapse = "_")[
-  which(apply(results[, c("model", "bacteria", "setting")], 1, paste0, collapse = "_") %in% 
-          apply(best_models, 1, paste0, collapse = "_"))]
-best_models_vifs
+# best_models_vifs = all_vif[which(apply(results[, c("model", "bacteria", "setting")], 1, paste0, collapse = "_") %in% 
+#           apply(best_models, 1, paste0, collapse = "_"))]
+# 
+# names(best_models_vifs) = apply(results[, c("model", "bacteria", "setting")], 1, paste0, collapse = "_")[
+#   which(apply(results[, c("model", "bacteria", "setting")], 1, paste0, collapse = "_") %in% 
+#           apply(best_models, 1, paste0, collapse = "_"))]
+# best_models_vifs
 
 ##################################################
 # Final plots
@@ -428,24 +429,24 @@ for (i in 1:nrow(best_models)) {
 }
 dev.off()
   
-# Normality of residuals 
-sw_p_df = all_residuals %>%
-  inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
-  group_by(setting, bacteria) %>%
-  summarise(p = round(shapiro.test(residuals)$p.value, 4), .groups = "drop") %>%
-  mutate(setting = ifelse(setting == "hospital", "Hospital", "ICU"))
-
-all_residuals %>%
-  inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
-  mutate(setting = ifelse(setting == "hospital", "Hospital", "ICU")) %>%
-  ggplot(., aes(sample = residuals)) +
-  stat_qq_band(bandType = "boot", mapping = aes(fill = "Bootstrap"), alpha = 0.5, fill = "grey60") +
-  stat_qq_line() +
-  stat_qq() +
-  geom_text(data = sw_p_df, aes(sample = NULL, label = p, x = 0, y = 2)) +
-  facet_grid(cols = vars(setting), rows = vars(bacteria)) +
-  theme_bw()
-ggsave("../Paper/Supplementary/national_normality_residuals.png", height = 8, width = 6)
+# # Normality of residuals 
+# sw_p_df = all_residuals %>%
+#   inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
+#   group_by(setting, bacteria) %>%
+#   summarise(p = round(shapiro.test(residuals)$p.value, 4), .groups = "drop") %>%
+#   mutate(setting = ifelse(setting == "hospital", "Hospital", "ICU"))
+# 
+# all_residuals %>%
+#   inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
+#   mutate(setting = ifelse(setting == "hospital", "Hospital", "ICU")) %>%
+#   ggplot(., aes(sample = residuals)) +
+#   stat_qq_band(bandType = "boot", mapping = aes(fill = "Bootstrap"), alpha = 0.5, fill = "grey60") +
+#   stat_qq_line() +
+#   stat_qq() +
+#   geom_text(data = sw_p_df, aes(sample = NULL, label = p, x = 0, y = 2)) +
+#   facet_grid(cols = vars(setting), rows = vars(bacteria)) +
+#   theme_bw()
+# ggsave("../Paper/Supplementary/national_normality_residuals.png", height = 8, width = 6)
 
 # Plot fits
 all_fits %>%
@@ -751,6 +752,162 @@ all_estimates %>%
   arrange(bacteria, setting) %>%
   mutate(Estimate = round(1-exp(Estimate),2), q2_5 = round(1-exp(q2_5),2), 
          q97_5 = round(1-exp(q97_5), 2))
+
+##################################################
+# Table with unadjusted estimates
+##################################################
+# Outputs
+univariate_results = data.frame()
+for (i in 1:nrow(best_models)) {
+  
+  out = data.frame()
+  b = best_models$bacteria[i]
+  s = best_models$setting[i]
+  
+  if (s == "hospital") final_db = res_national
+  if (s == "icu") final_db = res_national_icu
+  
+  final_db = final_db %>% 
+    filter(bacterie == b) %>%
+    arrange(Date_week) %>%
+    mutate(
+      lag1_i_res = lag(n_res / nbjh * 1000),
+      
+      lag1_covid_intub_prev = lag(covid_intub_prev),
+      lag2_covid_intub_prev = lag(covid_intub_prev,2),
+      
+      lag1_periods = lag(periods, 1),
+      lag2_periods = lag(periods, 2),
+      
+      nbjh = nbjh/1000
+    ) %>% 
+    filter(!is.na(lag2_periods)) %>%
+    mutate(
+      Carbapenems = (Carbapenems - mean(Carbapenems)) / sd(Carbapenems),
+      Penicillins = (Penicillins - mean(Penicillins)) / sd(Penicillins),
+      TGC = (TGC - mean(TGC)) / sd(TGC),
+      
+      lag1_i_res = (lag1_i_res - mean(lag1_i_res)) / sd(lag1_i_res),
+      
+      covid_intub_prev = (covid_intub_prev - mean(covid_intub_prev)) / sd(covid_intub_prev),
+      lag1_covid_intub_prev = (lag1_covid_intub_prev - mean(lag1_covid_intub_prev)) / sd(lag1_covid_intub_prev),
+      lag2_covid_intub_prev = (lag2_covid_intub_prev - mean(lag2_covid_intub_prev)) / sd(lag2_covid_intub_prev),
+      
+      Date_year = as.character(Date_year)
+    )
+
+  # Univariate negative binomial regression model
+  for (v in c("periods", "lag1_periods", "lag2_periods")) {
+    m_eq = paste0("n_res ~ ", v, "+ offset(log(nbjh))")
+    m_out = glm.nb(m_eq, data = final_db, link = log)
+    m0 = glm.nb(n_res ~ offset(log(nbjh)), data = final_db, link = log)
+    
+    out_temp = data.frame(
+      var_name = rownames(confint(m_out))[-1],
+      p = summary(m_out)$coefficients[-1, "Pr(>|z|)"],
+      estimate = exp(summary(m_out)$coefficients[-1, "Estimate"]),
+      estimate_lw = exp(confint(m_out)[-1, "2.5 %"]),
+      estimate_up = exp(confint(m_out)[-1, "97.5 %"])
+    )
+    out_temp2 = data.frame(
+      var_name = v,
+      p = anova(m_out, m0)$`Pr(Chi)`[2],
+      estimate = NA,
+      estimate_lw = NA,
+      estimate_up = NA
+    )
+    
+    out = bind_rows(out, out_temp2, out_temp)
+  }
+
+  for (v in c("covid_intub_prev", "lag1_covid_intub_prev", "lag2_covid_intub_prev")) {
+    m_eq = paste0("n_res ~ ", v, "+ offset(log(nbjh))")
+    m_out = glm.nb(m_eq, data = final_db, link = log)
+    
+    out_temp = data.frame(
+      var_name = v,
+      p = summary(m_out)$coefficients[v,"Pr(>|z|)"],
+      estimate = exp(summary(m_out)$coefficients[v,"Estimate"]),
+      estimate_lw = exp(confint(m_out)[v,"2.5 %"]),
+      estimate_up = exp(confint(m_out)[v,"97.5 %"])
+    )
+    out = bind_rows(out, out_temp)
+  }
+  
+  out$bacteria = b
+  out$setting = s
+  univariate_results = bind_rows(univariate_results, out)
+}
+
+# Tables for each drug-bacterium pair
+covid_var_names = c("covid_intub_prev" = "Week w",
+                    "lag1_covid_intub_prev" = "Week w-1",
+                    "lag2_covid_intub_prev" = "Week w-2",
+                    
+                    "periods" = "Pandemic periods w",
+                    "periodsfirst wave" = "First wave",
+                    "periodslow to no res" = "Low to no res",
+                    "periodsmild res" = "Mild res",
+                    "periodsstrong res" = "Strong res",
+                    
+                    "lag1_periods" = "Pandemic periods w-1",
+                    "lag1_periodsfirst wave" = "First wave",
+                    "lag1_periodslow to no res" = "Low to no res",
+                    "lag1_periodsmild res" = "Mild res",
+                    "lag1_periodsstrong res" = "Strong res",
+                    
+                    "lag2_periods" = "Pandemic periods w-2",
+                    "lag2_periodsfirst wave" = "First wave",
+                    "lag2_periodslow to no res" = "Low to no res",
+                    "lag2_periodsmild res" = "Mild res",
+                    "lag2_periodsstrong res" = "Strong res"
+                    )
+
+for (b in bacterias) {
+  
+  univariate_tab = univariate_results %>%
+    filter(bacteria == b) %>%
+    mutate(
+      IRR = ifelse(is.na(estimate), "", paste0(round(estimate, 2), " (", round(estimate_lw, 2), "-", round(estimate_up,2), ")")),
+      setting = ifelse(setting == "icu", "ICU", "Hospital"),
+      SubVariable = recode(var_name, !!!covid_var_names),
+      Variable = case_when(
+        grepl("covid_intub_prev", var_name) ~ "COVID-19 intubation prevalence",
+        grepl("^periods", var_name) ~ "Pandemic periods w",
+        grepl("^lag1_periods", var_name) ~ "Pandemic periods w-1",
+        grepl("^lag2_periods", var_name) ~ "Pandemic periods w-2"
+      ),
+      p = round(p, 4)
+    ) %>%
+    mutate(SubVariable = ifelse(Variable == SubVariable, "", SubVariable)) %>%
+    dplyr::select(setting, Variable, SubVariable, IRR, p) %>%
+    arrange(setting) %>%
+    group_by(setting, Variable) %>%
+    mutate(id = 1:n()) %>%
+    ungroup() %>%
+    group_by(setting) %>%
+    gt(.) %>%
+    cols_hide(columns = id) %>%
+    cols_label(Variable = b, SubVariable = "", p = "p-value") %>%
+    tab_style(
+      style = list(cell_text(weight = "bold")),
+      locations = list(cells_row_groups(), cells_column_labels(), cells_body(columns = p, rows = p <= 0.05))) %>%
+    # tab_options(table.font.size = 11) %>%
+    sub_values(
+      columns = Variable,
+      rows = id > 1,
+      replacement = "",
+      pattern = ".*"
+    ) %>%
+    tab_footnote(
+      locations = cells_body(rows = grepl("periods", Variable) & SubVariable == "", 
+                             columns = p),
+      footnote = "Global p-value",
+      placement = "right"
+      )
+  gtsave(univariate_tab, paste0("../Paper/Supplementary/national_estimates_univariate_", tolower(paste0(b, collapse = "")),".docx"))
+  gtsave(univariate_tab, paste0("tables/national_estimates_univariate_", tolower(paste0(b, collapse = "")),".docx"))
+}
 
 ##################################################
 # Sensitivity analysis
