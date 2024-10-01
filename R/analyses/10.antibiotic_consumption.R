@@ -391,12 +391,12 @@ p3 = france %>%
 # Final figure
 figure4 = ggarrange(
   p1,
-  ggarrange(p2, p3, ncol = 2, widths = c(1,0.5)),
-  nrow = 2, heights = c(1,0.7), labels = c("A", "B")
+  ggarrange(p2, p3, ncol = 2, widths = c(1,0.3)),
+  nrow = 2, heights = c(1,1), labels = c("A", "B")
   )
 figure4
-ggsave("../Paper/Figures/Figure4.png", figure4, height = 11, width = 9)
-ggsave("plots/Figure4.png", figure4, height = 11, width = 9)
+ggsave("../Paper/Figures/Figure4.png", figure4, height = 12, width = 8)
+ggsave("plots/Figure4.png", figure4, height = 12, width = 8)
 
 ##################################################
 # Supplementary plot of absolute change between 

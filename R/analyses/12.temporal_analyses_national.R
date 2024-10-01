@@ -27,14 +27,17 @@ load("data/int_national_start_end.rda")
 # Resistance data
 load("data/res_hospital.rda")
 load("data/res_icu.rda")
+load("data/res_not_icu.rda")
 
 # Covid-19 intubation data
 load("data/covid_intub_hospital.rda")
 load("data/covid_intub_icu.rda")
+load("data/covid_intub_not_icu.rda")
 
 # Bed-days data
 load("data/bd_pmsi_hospital.rda")
 load("data/bd_pmsi_icu.rda")
+load("data/bd_pmsi_not_icu.rda")
 
 # Antibiotic consumption data
 load("data/atb_use.rda")
@@ -51,6 +54,18 @@ atb_use = atb_use %>%
 
 load("data/atb_use_icu.rda")
 atb_use_icu = atb_use_icu %>%
+  filter(atb_class %in% c("Imipenem + Meropenem", "Penicillins", "Third generation Cephalosporins")) %>%
+  mutate(consumption = molDDD/Nbhosp*1000, 
+         atb_class = case_when(
+           atb_class == "Imipenem + Meropenem" ~ "Carbapenems", 
+           atb_class == "Third generation Cephalosporins" ~ "TGC",
+           .default = atb_class
+         )) %>%
+  dplyr::select(Date_year, atb_class, consumption) %>%
+  pivot_wider(names_from = atb_class, values_from = consumption)
+
+load("data/atb_use_not_icu.rda")
+atb_use_not_icu = atb_use_not_icu %>%
   filter(atb_class %in% c("Imipenem + Meropenem", "Penicillins", "Third generation Cephalosporins")) %>%
   mutate(consumption = molDDD/Nbhosp*1000, 
          atb_class = case_when(
@@ -94,6 +109,30 @@ res_national_icu = res_icu %>%
 sum(all_dates %in% res_national_icu$Date_week)
 length(all_dates)
 
+# Merge national not ICU databases
+res_national_not_icu = res_not_icu %>%
+  left_join(., bd_pmsi_not_icu, by = "Date_week") %>%
+  left_join(., covid_intub_not_icu, by = "Date_week") %>%
+  mutate(
+    covid_intub = ifelse(is.na(covid_intub), 0, covid_intub),
+    Date_year = lubridate::year(Date_week)
+  ) %>%
+  left_join(., atb_use_not_icu, by = "Date_year") %>%
+  mutate(covid_intub_prev = covid_intub / nbjh * 1000) %>%
+  left_join(., int_national, by = "Date_week")
+
+sum(all_dates %in% res_national_not_icu$Date_week)
+length(all_dates)
+
+##################################################
+# Time series for hospitals (except ICUs)
+##################################################
+res_national_not_icu %>%
+  filter(bacterie=="CR P. aeruginosa") %>%
+  ggplot(., aes(x = Date_week, y = n_res)) +
+  geom_line() +
+  theme_bw()
+
 ##################################################
 # Regression models
 ##################################################
@@ -104,7 +143,7 @@ models = names(model_names)
 n_models = length(models)
 
 # Outputs
-results = expand.grid(setting = c("icu", "hospital"), model = models, bacteria = bacterias) %>%
+results = expand.grid(setting = c("icu", "hospital", "not icu"), model = models, bacteria = bacterias) %>%
   mutate(
     poisson_OD = NA, 
     negbin_OD = NA, 
@@ -124,13 +163,14 @@ all_models = vector("list", n_bacterias*n_models)
 k=1
 
 # Regression models 
-for (db in c("icu", "hospital")) {
+for (db in c("icu", "hospital", "not icu")) {
   for (mod in models) {
     for (i in seq_along(bacterias)) {
       
       # Create final database 
       if (db == "hospital") final_db = res_national
       if (db == "icu") final_db = res_national_icu
+      if (db == "not icu") final_db = res_national_not_icu
       
       final_db = final_db %>% 
         filter(bacterie == bacterias[i]) %>%
