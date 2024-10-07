@@ -197,7 +197,7 @@ model2_estimates = all_estimates %>%
   scale_alpha_identity() +
   theme_bw() +
   theme(legend.position = "right", legend.title = element_blank()) +
-  guides(alpha = "none") +
+  guides(alpha = "none", color = guide_legend(reverse = T)) +
   labs(x = "", y = "Incidence rate ratio (95% CI)") 
 ggsave("../Paper/Supplementary/estimates_regions_sensitivity.png", model2_estimates, height = 7, width = 6)
 ggsave("plots/regressions/estimates_regions_sensitivity.png", model2_estimates, height = 7, width = 6)

@@ -125,15 +125,6 @@ sum(all_dates %in% res_national_not_icu$Date_week)
 length(all_dates)
 
 ##################################################
-# Time series for hospitals (except ICUs)
-##################################################
-res_national_not_icu %>%
-  filter(bacterie=="CR P. aeruginosa") %>%
-  ggplot(., aes(x = Date_week, y = n_res)) +
-  geom_line() +
-  theme_bw()
-
-##################################################
 # Regression models
 ##################################################
 # Bacterias and models
@@ -1216,3 +1207,132 @@ fig
 ggsave("../Paper/Supplementary/crpa_leads.png", fig, height = 9, width = 8)
 ggsave("plots/regressions/crpa_leads.png", fig, height = 9, width = 8)
 
+
+##################################################
+# Hospital without ICUs at the national level
+# for CR-PA
+##################################################
+# Plot resistance incidence data
+res_national_not_icu %>%
+  filter(bacterie=="CR P. aeruginosa") %>%
+  ggplot(., aes(x = Date_week, y = n_res)) +
+  geom_line() +
+  theme_bw()
+
+# Best regression model 
+results_not_icu = data.frame(
+    setting = "not icu",
+    model = models,
+    bacteria = "CR P. aeruginosa",
+    poisson_OD = NA, 
+    negbin_OD = NA, 
+    theta = NA, 
+    theta_min = NA,
+    theta_max = NA,
+    pseudoR2 = NA, 
+    aic = NA
+  ) %>%
+  arrange(model)
+
+all_estimates_not_icu = data.frame()
+all_residuals_not_icu = data.frame()
+all_vif_not_icu = vector("list", n_models)
+all_models_not_icu = vector("list", n_models)
+
+# Regression models 
+b = "CR P. aeruginosa"
+db = "not icu"
+for (i in 1:nrow(results_not_icu)) {
+  mod =results_not_icu$model[i]
+  
+  # Create final database 
+  final_db = res_national_not_icu
+  
+  final_db = final_db %>% 
+    filter(bacterie == b) %>%
+    arrange(Date_week) %>%
+    mutate(
+      lag1_i_res = lag(n_res / nbjh * 1000),
+      
+      lag1_covid_intub_prev = lag(covid_intub_prev),
+      lag2_covid_intub_prev = lag(covid_intub_prev,2),
+      
+      lag1_periods = lag(periods, 1),
+      lag2_periods = lag(periods, 2),
+      
+      nbjh = nbjh/1000
+    ) %>% 
+    filter(!is.na(lag2_periods)) %>%
+    mutate(
+      Carbapenems = (Carbapenems - mean(Carbapenems)) / sd(Carbapenems),
+      
+      lag1_i_res = (lag1_i_res - mean(lag1_i_res)) / sd(lag1_i_res),
+      
+      covid_intub_prev = (covid_intub_prev - mean(covid_intub_prev)) / sd(covid_intub_prev),
+      lag1_covid_intub_prev = (lag1_covid_intub_prev - mean(lag1_covid_intub_prev)) / sd(lag1_covid_intub_prev),
+      lag2_covid_intub_prev = (lag2_covid_intub_prev - mean(lag2_covid_intub_prev)) / sd(lag2_covid_intub_prev),
+      
+      Date_year = as.character(Date_year)
+    )
+  
+  # Multivariate model
+  if (mod == "model0") m_eq = "n_res ~ lag1_i_res + Carbapenems + offset(log(nbjh))"
+  if (mod == "model1") m_eq = "n_res ~ lag1_i_res + periods + Carbapenems + offset(log(nbjh))"
+  if (mod == "model2") m_eq = "n_res ~ lag1_i_res + lag1_periods + Carbapenems + offset(log(nbjh))"
+  if (mod == "model3") m_eq = "n_res ~ lag1_i_res + lag2_periods + Carbapenems + offset(log(nbjh))"
+  if (mod == "model4") m_eq = "n_res ~ lag1_i_res + covid_intub_prev + Carbapenems + offset(log(nbjh))"
+  if (mod == "model5") m_eq = "n_res ~ lag1_i_res + lag1_covid_intub_prev + Carbapenems + offset(log(nbjh))"
+  if (mod == "model6") m_eq = "n_res ~ lag1_i_res + lag2_covid_intub_prev + Carbapenems + offset(log(nbjh))"
+  
+  # Overdispersion in Poisson regression model
+  results_not_icu$poisson_OD[i] = check_overdispersion(glm(m_eq, data = final_db, family = poisson))$p_value
+  
+  # # Negative binomial regression model
+  # m1 = glm.nb(m_eq1, data = final_db, link = log)
+  m = glm.nb(m_eq, data = final_db, link = log)
+  # anova(m, m1)
+  
+  results_not_icu$negbin_OD[i] = check_overdispersion(m)$p_value
+  results_not_icu$theta[i] = m$theta 
+  results_not_icu$theta_min[i] = m$theta + qnorm(0.025) * m$SE.theta
+  results_not_icu$theta_max[i] = m$theta + qnorm(0.975) * m$SE.theta
+  results_not_icu$pseudoR2[i] = DescTools::PseudoR2(m)
+  
+  # Save the models
+  all_models_not_icu[[i]] = m
+  
+  # Colinearity of predictors
+  if (mod != "model0") all_vif_not_icu[[i]] = VIF(m)
+  
+  # AIC
+  results_not_icu$aic[i] = AIC(m)
+  
+  # Residuals
+  mod_residuals = data.frame(
+    setting = db,
+    model = mod,
+    bacteria = b,
+    residuals = residuals(m)
+  )
+  all_residuals_not_icu = bind_rows(all_residuals_not_icu, mod_residuals)
+  
+  # Estimates and p-values
+  mod_estimates = data.frame(cbind(summary(m)$coefficients, confint(m))) %>%
+    rownames_to_column(var = 'variable') %>%
+    rename(q2_5 = `X2.5..`, q97_5 = `X97.5..`, p = `Pr...z..`, z = `z.value`, sd = `Std..Error`) %>%
+    mutate(bacteria = b, model = mod, setting = db)
+  all_estimates_not_icu = bind_rows(all_estimates_not_icu, mod_estimates)
+}
+
+# Best model
+best_not_icu = results_not_icu %>%
+  mutate(aic = round(aic), setting = "Hospital (except ICU)") %>%
+  dplyr::select(setting, model, aic) %>%
+  group_by(setting) %>%
+  gt(.) %>%
+  cols_label(model = "", aic = "CR P. aeruginosa") %>%
+  tab_style(
+    style = list(cell_text(weight = "bold")),
+    locations = list(cells_row_groups(), cells_column_labels(), cells_body(columns = aic, rows = aic == min(aic))))
+gtsave(best_not_icu, "../Paper/Supplementary/best_model_not_icu_crpa.docx")
+gtsave(best_not_icu, "tables/best_model_not_icu_crpa.docx")
