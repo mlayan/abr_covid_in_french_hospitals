@@ -58,6 +58,7 @@ p1 = ggplot(consumption_hospital, aes(x = Date_year, y = consumption, group = co
   geom_point(data = median_hospital, aes(x = Date_year, y = med), col = "red") +
   facet_wrap(facets = vars(atb_class), scales = "free_y", ncol = 5) +
   theme_bw() +
+  # scale_y_continuous(trans = scales::pseudo_log_trans()) +
   labs(x = "", y = "Annual antibiotic consumption (in DDD/1,000 bed-days)",
        title = "Hospitals")
 
@@ -81,6 +82,7 @@ p2 = ggplot(consumption_icu, aes(x = Date_year, y = consumption, group = code)) 
   geom_point(data = median_icu, aes(x = Date_year, y = med), col = "red") +
   facet_wrap(facets = vars(atb_class), scales = "free_y", ncol = 5) +
   theme_bw() +
+  # scale_y_continuous(trans = scales::pseudo_log_trans()) +
   labs(x = "", y = "Annual antibiotic consumption (in DDD/1,000 bed-days)",
        title = "ICUs")
 

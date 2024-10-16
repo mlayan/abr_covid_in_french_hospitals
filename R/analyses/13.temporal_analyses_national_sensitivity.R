@@ -235,11 +235,12 @@ results %>%
   mutate(aic = round(aic)) %>%
   pivot_wider(names_from = model, values_from = aic)
 
-best_models = data.frame(
+best_models_sensitivity = data.frame(
   model = c("model2", "model0", "model0", "model1", "model1", "model6", "model1", "model0", "model1", "model1"),
   bacteria = rep(bacterias, 2), 
   setting = rep(c("hospital", "icu"), each = n_bacterias)
 )
+save(best_models_sensitivity, file = "data/best_models_sensitivity.rda")
 
 # For CR-PA at the hospital level comparison with LRT
 # of models 1 and 6

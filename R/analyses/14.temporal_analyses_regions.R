@@ -99,8 +99,7 @@ p2020 = df %>%
   facet_wrap(facets = vars(Date_year), ncol = 3, scales = "free_y") +
   coord_flip() +
   theme_bw() + 
-  theme(axis.title = element_blank()) #+
-  # ylim(c(0,13))
+  theme(axis.title = element_blank()) 
 
 p2021 = df %>% 
   filter(Date_year == 2021) %>%
@@ -110,8 +109,7 @@ p2021 = df %>%
   coord_flip() +
   theme_bw() + 
   theme(axis.title = element_blank()) +
-  labs(y = "", x = "") #+
-  # ylim(c(0,13))
+  labs(y = "", x = "") 
 
 p2022 = df %>% 
   filter(Date_year == 2022) %>%
@@ -121,8 +119,7 @@ p2022 = df %>%
   coord_flip() +
   theme_bw() + 
   theme(axis.title = element_blank()) +
-  labs(y = "", x = "") #+
-  # ylim(c(0,13))
+  labs(y = "", x = "") 
 
 p_title = title <- ggdraw() + 
   draw_label(
@@ -209,46 +206,47 @@ for (i in 1:nrow(results)) {
     m_eq = "n_res ~ lag1_i_res + lag2_covid_intub_prev + Carbapenems + offset(log(nbjh))"
   }
   
-  # if (!(b == "MRSA" & r %in% c("Bretagne", "Centre-Val de Loire", "Normandie")) &
-  #     !(b == "ESBL E. coli" & r %in% c("Bretagne"))
-  #     ) {
+  if (check_overdispersion(glm(m_eq, family = poisson, data = final_db))$p_value > 0.05) {
+    m = glm(m_eq, family = poisson, data = final_db)
+    results$poisson_OD[i] = check_overdispersion(m)$p_value
+  } else {
     m = glm.nb(m_eq, data = final_db, link = log)
     results$poisson_OD[i] = check_overdispersion(glm(m_eq, family = poisson, data = final_db))$p_value
     results$negbin_OD[i] = check_overdispersion(glm.nb(m_eq, data = final_db, link = log))$p_value
-    results$theta_OD[i] = m$theta
+    results$theta_OD[i] = m$theta    
+  }
     
-    # Model checks
-    all_vif[[i]] = VIF(m)
-    results$aic[i] = AIC(m)
-    
-    # Residuals
-    mod_residuals = data.frame(
-      region = r,
-      model = mod,
-      bacteria = b,
-      residuals = residuals(m)
-    )
-    all_residuals = bind_rows(all_residuals, mod_residuals)
-    
-    # Estimates and p-values
-    mod_estimates = data.frame(cbind(summary(m)$coefficients, confint(m))) %>%
-      rownames_to_column(var = 'variable') %>%
-      rename(q2_5 = `X2.5..`, q97_5 = `X97.5..`, p = `Pr...z..`, z = `z.value`, sd = `Std..Error`) %>%
-      mutate(bacteria = b, region = r)
-    all_estimates = bind_rows(all_estimates, mod_estimates)
-    
-    # Model fit
-    mod_fit = data.frame(
-      region = r,
-      bacteria = b,
-      Date_week = final_db$Date_week, 
-      n_res = final_db$n_res, 
-      nbjh = final_db$nbjh,
-      fit = predict(m, type = "link", se.fit = T)$fit,
-      se.fit = predict(m, type = "link", se.fit = T)$se.fit
-    )
-    all_fits = bind_rows(all_fits, mod_fit)
-  # }
+  # Model checks
+  all_vif[[i]] = VIF(m)
+  results$aic[i] = AIC(m)
+  
+  # Residuals
+  mod_residuals = data.frame(
+    region = r,
+    model = mod,
+    bacteria = b,
+    residuals = residuals(m)
+  )
+  all_residuals = bind_rows(all_residuals, mod_residuals)
+  
+  # Estimates and p-values
+  mod_estimates = data.frame(cbind(summary(m)$coefficients, confint(m))) %>%
+    rownames_to_column(var = 'variable') %>%
+    rename(q2_5 = `X2.5..`, q97_5 = `X97.5..`, p = `Pr...z..`, z = `z.value`, sd = `Std..Error`) %>%
+    mutate(bacteria = b, region = r)
+  all_estimates = bind_rows(all_estimates, mod_estimates)
+  
+  # Model fit
+  mod_fit = data.frame(
+    region = r,
+    bacteria = b,
+    Date_week = final_db$Date_week, 
+    n_res = final_db$n_res, 
+    nbjh = final_db$nbjh,
+    fit = predict(m, type = "link", se.fit = T)$fit,
+    se.fit = predict(m, type = "link", se.fit = T)$se.fit
+  )
+  all_fits = bind_rows(all_fits, mod_fit)
 }
 
 
