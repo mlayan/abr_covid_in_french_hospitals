@@ -133,15 +133,15 @@ national_2019_ref_year = atb_use_hospital_level_agg %>%
   mutate(
     comparison = paste0(group1, "vs", group2),
     conf_int = ifelse( -conf.low > -conf.high,
-                       paste0("(", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
-                       paste0("(", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
+                       paste0(-round(estimate, 1), " (", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
+                       paste0(-round(estimate, 1), " (", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
     ),
-    estimate = -round(estimate, 2),
-    p.adj = round(p.adj, 3),
-    p_f = round(p_f, 3)
+    p.adj.bis = round(p.adj, 3),
+    p.adj = ifelse(p.adj < 0.001, "<0.001", round(p.adj, 3)),
+    p_f = ifelse(p_f < 0.001, "<0.001", round(p_f, 3))
   ) %>%
-  select(atb_class, p_f, comparison, estimate, conf_int, p.adj) %>%
-  pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
+  select(atb_class, p_f, comparison, conf_int, p.adj, p.adj.bis) %>%
+  pivot_wider(names_from = comparison, values_from = c(conf_int, p.adj, p.adj.bis)) %>%
   arrange(atb_class) %>%
   mutate(atb_class = as.character(atb_class)) %>%
   mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
@@ -150,29 +150,29 @@ national_2019_ref_year = atb_use_hospital_level_agg %>%
 # Hospital consumption table
 hospital_tab = national_2019_ref_year %>%
   gt(.) %>%
+  cols_hide(
+    columns = c(p.adj.bis_2019vs2020, p.adj.bis_2019vs2021, p.adj.bis_2019vs2022)
+  ) %>%
   tab_spanner(
     label = "2019 vs 2020",
-    columns = c(estimate_2019vs2020, conf_int_2019vs2020, `p.adj_2019vs2020`)
+    columns = c(conf_int_2019vs2020, `p.adj_2019vs2020`)
   ) %>%
   tab_spanner(
     label = "2019 vs 2021",
-    columns = c(estimate_2019vs2021, conf_int_2019vs2021, `p.adj_2019vs2021`)
+    columns = c(conf_int_2019vs2021, `p.adj_2019vs2021`)
   ) %>%
   tab_spanner(
     label = "2019 vs 2022",
-    columns = c(estimate_2019vs2022, conf_int_2019vs2022, `p.adj_2019vs2022`)
+    columns = c(conf_int_2019vs2022, `p.adj_2019vs2022`)
   ) %>%
   cols_label(
     p_f = "Friedman test p-value",
-    estimate_2019vs2020 = "Estimate",
-    conf_int_2019vs2020 = "98.3% CI", 
-    `p.adj_2019vs2020` = "adjusted p",
-    estimate_2019vs2021 = "Estimate",
-    conf_int_2019vs2021 = "98.3% CI", 
-    `p.adj_2019vs2021` = "adjusted p",
-    estimate_2019vs2022 = "Estimate",
-    conf_int_2019vs2022 = "98.3% CI", 
-    `p.adj_2019vs2022` = "adjusted p",
+    conf_int_2019vs2020 = "Estimate (98.3% CI)", 
+    `p.adj_2019vs2020` = "p-value",
+    conf_int_2019vs2021 = "Estimate (98.3% CI)", 
+    `p.adj_2019vs2021` = "p-value",
+    conf_int_2019vs2022 = "Estimate (98.3% CI)", 
+    `p.adj_2019vs2022` = "p-value",
     atb_class = "",
     DCI = ""
   ) %>%
@@ -182,16 +182,16 @@ hospital_tab = national_2019_ref_year %>%
     ),
     locations = list(
       cells_body(
-        rows = p.adj_2019vs2020 <= 0.05,
-        columns = estimate_2019vs2020
+        rows = p.adj.bis_2019vs2020 <= 0.05,
+        columns = conf_int_2019vs2020
       ),
       cells_body(
-        rows = p.adj_2019vs2021 <= 0.05,
-        columns = estimate_2019vs2021
+        rows = p.adj.bis_2019vs2021 <= 0.05,
+        columns = conf_int_2019vs2021
       ),
       cells_body(
-        rows = p.adj_2019vs2022 <= 0.05,
-        columns = estimate_2019vs2022
+        rows = p.adj.bis_2019vs2022 <= 0.05,
+        columns = conf_int_2019vs2022
       ),
       cells_column_spanners(),
       cells_column_labels()
@@ -232,15 +232,15 @@ icu_2019_ref_year = atb_use_hospital_level %>%
   mutate(
     comparison = paste0(group1, "vs", group2),
     conf_int = ifelse( -conf.low > -conf.high,
-                       paste0("(", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
-                       paste0("(", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
+                       paste0(-round(estimate, 1), " (", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
+                       paste0(-round(estimate, 1), " (", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
     ),
-    estimate = -round(estimate, 2),
-    p.adj = round(p.adj, 3),
-    p_f = round(p_f, 3)
+    p.adj.bis = round(p.adj, 3),
+    p.adj = ifelse(p.adj < 0.001, "<0.001", round(p.adj, 3)),
+    p_f = ifelse(p_f < 0.001, "<0.001", round(p_f, 3))
   ) %>%
-  select(atb_class, p_f, comparison, estimate, conf_int, p.adj) %>%
-  pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
+  select(atb_class, p_f, comparison, conf_int, p.adj, p.adj.bis) %>%
+  pivot_wider(names_from = comparison, values_from = c(conf_int, p.adj, p.adj.bis)) %>%
   arrange(atb_class) %>%
   mutate(atb_class = as.character(atb_class)) %>%
   mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
@@ -249,29 +249,27 @@ icu_2019_ref_year = atb_use_hospital_level %>%
 # ICU
 icu_tab = icu_2019_ref_year %>%
   gt(.) %>%
+  cols_hide(columns = c(p.adj.bis_2019vs2020, p.adj.bis_2019vs2021, p.adj.bis_2019vs2022)) %>%
   tab_spanner(
     label = "2019 vs 2020",
-    columns = c(estimate_2019vs2020, conf_int_2019vs2020, `p.adj_2019vs2020`)
+    columns = c(conf_int_2019vs2020, `p.adj_2019vs2020`)
   ) %>%
   tab_spanner(
     label = "2019 vs 2021",
-    columns = c(estimate_2019vs2021, conf_int_2019vs2021, `p.adj_2019vs2021`)
+    columns = c(conf_int_2019vs2021, `p.adj_2019vs2021`)
   ) %>%
   tab_spanner(
     label = "2019 vs 2022",
-    columns = c(estimate_2019vs2022, conf_int_2019vs2022, `p.adj_2019vs2022`)
+    columns = c(conf_int_2019vs2022, `p.adj_2019vs2022`)
   ) %>%
   cols_label(
     p_f = "Friedman test p-value",
-    estimate_2019vs2020 = "Estimate",
-    conf_int_2019vs2020 = "98.3% CI", 
-    `p.adj_2019vs2020` = "adjusted p",
-    estimate_2019vs2021 = "Estimate",
-    conf_int_2019vs2021 = "98.3% CI", 
-    `p.adj_2019vs2021` = "adjusted p",
-    estimate_2019vs2022 = "Estimate",
-    conf_int_2019vs2022 = "98.3% CI", 
-    `p.adj_2019vs2022` = "adjusted p",
+    conf_int_2019vs2020 = "Estimate (98.3% CI)", 
+    `p.adj_2019vs2020` = "p-value",
+    conf_int_2019vs2021 = "Estimate (98.3% CI)", 
+    `p.adj_2019vs2021` = "p-value",
+    conf_int_2019vs2022 = "Estimate (98.3% CI)", 
+    `p.adj_2019vs2022` = "p-value",
     atb_class = "",
     DCI = ""
   ) %>%
@@ -281,16 +279,16 @@ icu_tab = icu_2019_ref_year %>%
     ),
     locations = list(
       cells_body(
-        rows = p.adj_2019vs2020 <= 0.05,
-        columns = estimate_2019vs2020
+        rows = p.adj.bis_2019vs2020 <= 0.05,
+        columns = conf_int_2019vs2020
       ),
       cells_body(
-        rows = p.adj_2019vs2021 <= 0.05,
-        columns = estimate_2019vs2021
+        rows = p.adj.bis_2019vs2021 <= 0.05,
+        columns = conf_int_2019vs2021
       ),
       cells_body(
-        rows = p.adj_2019vs2022 <= 0.05,
-        columns = estimate_2019vs2022
+        rows = p.adj.bis_2019vs2022 <= 0.05,
+        columns = conf_int_2019vs2022
       ),
       cells_column_spanners(),
       cells_column_labels()

@@ -51,8 +51,10 @@ df_corr = bind_rows(df_corr_etab, df_corr_icu) %>%
   summarise(corr = paste0(
     'tau = ',
     round(cor.test(res_i, covid_intub_prev, method = "kendall")$estimate, 3), 
-    "\np = ",
-    round(cor.test(res_i, covid_intub_prev, method = "kendall")$p.value, 3)
+    "\np",
+    ifelse(cor.test(res_i, covid_intub_prev, method = "kendall")$p.value<0.001,
+           " < 0.001",
+           paste0(" = ", round(cor.test(res_i, covid_intub_prev, method = "kendall")$p.value, 3)))
   ), 
   .groups = "drop"
   ) %>%
@@ -73,15 +75,22 @@ df_anova = df_int %>%
   mutate(aov_res = map(data, function(x) kruskal.test(x$res_incidence ~ x$periods)$p.value)) %>%
   dplyr::select(-data) %>% 
   unnest(cols = aov_res) %>%
-  mutate(y = ifelse(setting == "ICU", 4, 0.4))
+  mutate(
+    y = ifelse(setting == "ICU", 4, 0.4),
+    aov_res = ifelse(
+      aov_res < 0.001,
+      "p < 0.001",
+      paste0("p = ", round(aov_res, 3))
+    )
+    )
 
 p1 = ggplot(data = df_int, aes(x = periods, y = res_incidence)) +
   geom_boxplot() +
-  geom_text(data = df_anova, aes(x = 4.5, y = y, label = paste0("p=",round(aov_res,3)))) +
+  geom_text(data = df_anova, aes(x = 4.5, y = y, label = aov_res)) +
   facet_grid(cols = vars(bacterie), rows = vars(setting), scales = "free_y") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 30, hjust = 1), axis.title.x = element_blank()) +
-  labs(x = "", y = "Weekly incidence of resistant infections\n(for 1,000 bed-days)") +
+  labs(x = "", y = "Weekly incidence of resistant isolates\n(for 1,000 bed-days)") +
   expand_limits(y=0)
 
 # Covid-19 prevalence vs incidence of resistant infections
@@ -92,7 +101,7 @@ p2 = bind_rows(df_corr_etab, df_corr_icu) %>%
   theme_bw() +
   ggh4x::facet_grid2(cols = vars(bacterie), rows = vars(setting), scales = "free", independent  ="x") +
   labs(x = "Weekly number of intubated Covid-19 bed-days (for 1,000 bed-days)", 
-       y = "Weekly incidence of resistant infections\n(for 1,000 bed-days)")
+       y = "Weekly incidence of resistant isolates\n(for 1,000 bed-days)")
 
 # Final correlation figure
 p = ggarrange(p1, p2, nrow = 2, labels = c("A", "B"))

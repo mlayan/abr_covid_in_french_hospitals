@@ -374,7 +374,7 @@ all_fits %>%
   guides(fill=guide_legend(order=1, override.aes = list(col = 'black'))) +
   theme_bw() +
   theme(legend.title = element_text(hjust=0.5), legend.position = "bottom") +
-  labs(x = "", y = "Weekly no. of resistant acquisitions")
+  labs(x = "", y = "Weekly no. of resistant isolates")
 ggsave("../Paper/Supplementary/national_fits_sensitivity.png", height = 8, width = 8)
 ggsave("plots/regressions/national_fits_sensitivity.png", height = 8, width = 8)
 

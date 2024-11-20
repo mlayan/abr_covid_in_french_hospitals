@@ -90,7 +90,7 @@ plot_res_p = res_hospital %>%
   scale_fill_manual(values = colorRampPalette(c("dodgerblue3", "lightblue1"))(4)) +
   theme_bw() +
   theme(legend.position = "right", axis.text.x = element_text(angle = 30, hjust = 1)) +
-  labs(x = "", y = "Annual proportion of\nresistant infections", fill = "")
+  labs(x = "", y = "Annual proportion of\nresistant isolates", fill = "")
 
 # Cochrane-Armitage tests for trends
 prop_test_trend_df = function(df) {
@@ -98,7 +98,7 @@ prop_test_trend_df = function(df) {
   out = prop.trend.test(df$n_res, df$n_tot)
   out = as.data.frame(out[c("statistic", "p.value")])
   rownames(out) = NULL
-  s = lm(n_res/n_tot ~ Date_year, data = df, weights = df$var)
+  s = lm(n_res/n_tot ~ Date_year, data = df) #, weights = df$var)
   out$slope = coef(s)[["Date_year"]]*100
   out$slope_lw = confint(s)["Date_year", "2.5 %"]*100
   out$slope_up = confint(s)["Date_year", "97.5 %"]*100
@@ -109,12 +109,10 @@ plot_trends = res_hospital %>%
   mutate(Date_year = lubridate::year(Date_week)) %>%
   group_by(Date_year, bacterie) %>%
   summarise(n_res = sum(n_res), n_tot = sum(n_tot), .groups = "drop") %>%
-  group_by(bacterie) %>%
-  nest() %>%
+  nest(.by=bacterie) %>%
   mutate(out = map(data, prop_test_trend_df)) %>%
   dplyr::select(-data) %>%
   unnest(out) %>%
-  ungroup() %>%
   mutate(
     yaxis = "Trend",
     p_stars = case_when(p.value > 0.05 ~ "NS",
@@ -161,7 +159,7 @@ plot_res_i = bind_rows(
     ) +
   guides(fill = guide_legend(title.position = "top", order=1, override.aes = list(col = 'black'))) +
   expand_limits(y = 0) +
-  labs(x = "", y = "Weekly incidence of resistant infections (per 1,000 bed-days)")
+  labs(x = "", y = "Weekly incidence of resistant isolates (for 1,000 bed-days)")
 ggsave("plots/antibiotic_resistance/national_weekly_incidence.png", plot_res_i, height = 6, width = 12)
 
 # Final figure

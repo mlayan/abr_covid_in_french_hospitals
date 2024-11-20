@@ -42,7 +42,8 @@ atbplot = function(df, atbclass, level = "regional", facet_type = "geographic") 
       ) %>%
       mutate(group1 = factor(group1), group2 = factor(group2)) %>%
       filter(p.adj <= 0.05, group1 == "2019") %>%
-      mutate(y = case_when(group2 == "2020" ~ m/2, group2 == "2021" ~ m*2/3, group2 == "2022" ~ m*5/6))
+      mutate(y = case_when(group2 == "2020" ~ m/2, group2 == "2021" ~ m*2/3, group2 == "2022" ~ m*5/6)) %>%
+      mutate(p.adj = ifelse(p.adj<0.001, "<0.001", round(p.adj, 3)))
     
     # Plot
     colfunc <- colorRampPalette(c("floralwhite", "deepskyblue4"))
@@ -50,7 +51,7 @@ atbplot = function(df, atbclass, level = "regional", facet_type = "geographic") 
       geom_line(alpha = 0.1, aes(y = consumption, group = code)) +
       geom_point(data = df_mean, aes(x = as.factor(Date_year), y = consumption, fill = p_sign), 
                  col = "black", pch=21, size = 3, stroke = 0.2) +
-      geom_signif(data = df_comp, aes(xmin = group1, xmax = group2, annotations = round(p.adj, 4),
+      geom_signif(data = df_comp, aes(xmin = group1, xmax = group2, annotations = p.adj,
                                       y_position = y),
                   manual = T, textsize = 3, vjust = -0.2) +
       theme_bw() +

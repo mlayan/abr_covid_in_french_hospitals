@@ -465,7 +465,7 @@ all_fits %>%
   guides(fill=guide_legend(order=1, override.aes = list(col = 'black'))) +
   theme_bw() +
   theme(legend.title = element_text(hjust=0.5), legend.position = "bottom") +
-  labs(x = "", y = "Weekly no. of resistant acquisitions")
+  labs(x = "", y = "Weekly no. of resistant isolates")
 ggsave("../Paper/Supplementary/national_fits.png", height = 8, width = 8)
 ggsave("plots/regressions/national_fits.png", height = 8, width = 8)
 
@@ -577,8 +577,8 @@ var_names = c(
 all_estimates_tab = all_estimates %>%
   inner_join(., best_models, by = c("model", "setting", "bacteria")) %>%
   mutate(
-    estimate = paste0(round(exp(Estimate),2), " (", round(exp(q2_5),2), "-", round(exp(q97_5), 2), ")"),
-    p = round(p,3),
+    estimate = paste0(round(exp(Estimate),2), " (", round(exp(q2_5),2), ", ", round(exp(q97_5), 2), ")"),
+    p = ifelse(p < 0.001, "<0.001", round(p,3)),
     variable_precision = case_when(
       grepl("first", variable) ~ "First wave",
       grepl("strong", variable) ~ "Strong",
@@ -615,16 +615,16 @@ all_estimates_tab = all_estimates %>%
     columns = c(`estimate_MRSA`, `p_MRSA`)
   ) %>%
   cols_label(
-    `estimate_CR P. aeruginosa` = "IRR",  
-    `estimate_ESBL K. pneumoniae` = "IRR",
-    `estimate_ESBL E. coli` = "IRR",
-    `estimate_ESBL E. cloacae` = "IRR",
-    estimate_MRSA = "IRR",
-    `p_CR P. aeruginosa` = "p-value",
-    `p_ESBL K. pneumoniae` = "p-value",
-    `p_ESBL E. coli` = "p-value",
-    `p_ESBL E. cloacae` = "p-value",
-    p_MRSA = "p-value",
+    `estimate_CR P. aeruginosa` = "IRR (95% CI)",  
+    `estimate_ESBL K. pneumoniae` = "IRR (95% CI)",
+    `estimate_ESBL E. coli` = "IRR (95% CI)",
+    `estimate_ESBL E. cloacae` = "IRR (95% CI)",
+    estimate_MRSA = "IRR (95% CI)",
+    `p_CR P. aeruginosa` = "p",
+    `p_ESBL K. pneumoniae` = "p",
+    `p_ESBL E. coli` = "p",
+    `p_ESBL E. cloacae` = "p",
+    p_MRSA = "p",
     variable = "",
     variable_precision = ""
   ) %>%
@@ -662,7 +662,7 @@ overdispersion_tab = results %>%
   mutate(
     setting = ifelse(setting == "hospital", "Hospital", "ICU"),
     model = recode(model, !!!model_names), 
-    theta = paste0(round(theta, 1), " (", round(theta_min), "-", round(theta_max), ")")
+    theta = paste0(round(theta), " (", round(theta_min), ", ", round(theta_max), ")")
     ) %>%
   dplyr::select(setting, bacteria, model, theta) %>%
   arrange(setting, bacteria) %>%
@@ -716,7 +716,10 @@ ljung_box_tab = all_residuals %>%
   mutate(test = map(data, box_test)) %>%
   dplyr::select(-data) %>%
   unnest(test) %>%
-  mutate(setting = ifelse(setting == "icu", "ICU", "Hospital")) %>%
+  mutate(
+    setting = ifelse(setting == "icu", "ICU", "Hospital"),
+    p.value = ifelse(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))
+    ) %>%
   arrange(setting, bacteria) %>%
   group_by(setting) %>%
   gt() %>%
@@ -859,7 +862,7 @@ for (b in bacterias) {
   univariate_tab = univariate_results %>%
     filter(bacteria == b) %>%
     mutate(
-      IRR = ifelse(is.na(estimate), "", paste0(round(estimate, 2), " (", round(estimate_lw, 2), "-", round(estimate_up,2), ")")),
+      IRR = ifelse(is.na(estimate), "", paste0(round(estimate, 2), " (", round(estimate_lw, 2), ", ", round(estimate_up,2), ")")),
       setting = ifelse(setting == "icu", "ICU", "Hospital"),
       SubVariable = recode(var_name, !!!covid_var_names),
       Variable = case_when(
@@ -868,7 +871,7 @@ for (b in bacterias) {
         grepl("^lag1_periods", var_name) ~ "Pandemic periods w-1",
         grepl("^lag2_periods", var_name) ~ "Pandemic periods w-2"
       ),
-      p = round(p, 4)
+      p = ifelse(p<0.001, "<0.001", round(p, 3))
     ) %>%
     mutate(SubVariable = ifelse(Variable == SubVariable, "", SubVariable)) %>%
     dplyr::select(setting, Variable, SubVariable, IRR, p) %>%
@@ -1192,8 +1195,9 @@ p3=all_fits %>%
     breaks = c("p_first_wave", "p_strong_res", "p_mild_res", "p_no_res"),
     values = c("p_first_wave" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
   ) +
+  guides(fill=guide_legend(order=1, override.aes = list(col = 'black'))) +
   theme_bw() +
-  labs(x = "", y = "Weekly no. of incident CR P. aeruginosa", col = "")
+  labs(x = "", y = "Weekly no. of incident CR P. aeruginosa isolates", col = "")
 #ggsave("../Paper/Supplementary/crpa_leads_fits.png", height = 6, width = 10)
 
 # Final Supplementary figure 
