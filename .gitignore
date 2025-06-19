@@ -74,7 +74,17 @@ data/chu_legal_entity_reporting.rda
 data/metadata_admin.rda
 data/metadata_admin_espic.rda
 data/metadata_beds.rda
+
+data/covid_intub_hospital.rda
+data/covid_intub_icu_regions.rda
+data/covid_intub_icu.rda
+data/covid_intub_not_icu_region.rda
+data/covid_intub_not_icu.rda
+data/covid_intub_region.rda
+
 data/atb_use_hospital_level.rda
+
+data/res_hospital_detailed.rda
 
 # Additional analyses
 R/analyses/others/

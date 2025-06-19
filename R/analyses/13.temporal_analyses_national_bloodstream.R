@@ -7,7 +7,6 @@ library(tidyverse)
 library(MASS)
 library(performance)
 library(DescTools)
-library(qqplotr)
 library(ggpubr)
 library(cowplot)
 library(gt)
@@ -509,7 +508,7 @@ figure6 = plot_grid(
   )
 figure6
 ggsave("../Paper/Supplementary/Figure6_bloodstream.png", figure6, height = 6, width = 6)
-ggsave("plots/Figure6_bloodstream.png", figure6, height = 6, width = 6)
+ggsave("plots/regressions/national_bloodstream_estimates.png", figure6, height = 6, width = 6)
 
 # Table of model estimates
 all_estimates_tab = all_estimates %>%

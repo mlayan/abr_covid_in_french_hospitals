@@ -7,10 +7,7 @@ library(tidyverse)
 library(performance)
 library(MASS)
 library(DescTools)
-library(qqplotr)
-library(geofacet)
 library(ggpubr)
-library(cowplot)
 library(gt)
 
 # Helper functions
