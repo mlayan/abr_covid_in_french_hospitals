@@ -15,7 +15,6 @@ library(gt)
 
 # Helper functions
 source("R/helper/helper_functions.R")
-source("R/helper/helper_plots.R")
 source("R/helper/dictionaries.R")
 
 ##################################################
@@ -30,8 +29,8 @@ int_region = int_region %>%
   mutate(
     periods = case_when(
       p_strong_res + p_mild_res + p_no_res + p_first_wave == 0 ~ "pre-pandemic",
-      p_first_wave > 0.5 ~ "first wave", #  & Date_week <= as.Date("2020-04-13") 
-      p_strong_res > 0.5 ~ "strong res", # | (p_first > 0.5 & Date_week > as.Date("2020-04-13")) 
+      p_first_wave > 0.5 ~ "first wave",
+      p_strong_res > 0.5 ~ "strong res", 
       p_mild_res > 0.5 ~ "mild res",
       p_no_res > 0.5 ~ "low to no res",
       .default = NA
@@ -47,7 +46,7 @@ load("data/res_regions.rda")
 load("data/bd_pmsi_regions.rda")
 
 # Covid-19 intubation data
-load("data/covid_intub_region.rda")
+load("data/covid_region.rda")
 
 ##################################################
 # Combine data 
@@ -56,12 +55,12 @@ regional_df = res_regions %>%
   filter(bacterie %in% c("CR P. aeruginosa", "ESBL E. coli", "MRSA")) %>%
   left_join(., int_region, by = c("Date_week", "region")) %>%
   left_join(., bd_pmsi_regions, by = c("Date_week", "region")) %>%
-  left_join(., covid_intub_region, by = c("Date_week", "region")) %>%
+  left_join(., covid_region, by = c("Date_week", "region")) %>%
   mutate(
     Date_year = lubridate::year(Date_week),
-    covid_intub = ifelse(is.na(covid_intub), 0, covid_intub)
+    covid = ifelse(is.na(covid), 0, covid)
   ) %>%
-  mutate(covid_intub_prev = covid_intub / nbjh * 1000)
+  mutate(covid_prev = covid / nbjh * 1000)
 
 ##################################################
 # Regression analysis
@@ -98,12 +97,12 @@ for (i in 1:nrow(results)) {
     mutate(
       lag1_i_res = lag(n_res / nbjh * 1000),
       lag1_periods = lag(periods, 1),
-      lag2_covid_intub_prev = lag(covid_intub_prev, 2)
+      lag2_covid_prev = lag(covid_prev, 2)
     ) %>% 
-    filter(!is.na(lag2_covid_intub_prev)) %>%
+    filter(!is.na(lag2_covid_prev)) %>%
     mutate(
       lag1_i_res = (lag1_i_res - mean(lag1_i_res)) / sd(lag1_i_res),
-      lag2_covid_intub_prev = (lag2_covid_intub_prev - mean(lag2_covid_intub_prev)) / sd(lag2_covid_intub_prev)
+      lag2_covid_prev = (lag2_covid_prev - mean(lag2_covid_prev)) / sd(lag2_covid_prev)
       )
   
   # Multivariate model
@@ -163,44 +162,22 @@ for (i in 1:nrow(results)) {
   k = k+1
 } 
 
-# Is poisson necessary
-results %>%
-  filter(poisson_OD > 0.05)
-
-# P-values COVID-19-related variable
-all_estimates %>%
-  filter(grepl("lag1_periods", variable),
-         region %in% c("Auvergne-Rhône-Alpes", "Grand-Est", "Provence-Alpes-Côte d'Azur", "Île-de-France")) %>%
-  dplyr::select(region, variable, Estimate, q2_5, q97_5, p) %>%
-  mutate(Estimate = exp(Estimate), q2_5 = exp(q2_5), q97_5 = exp(q97_5))
-
 ##################################################
 # Final plot
 ##################################################
-covid_var_names = c(
-  "lag1_periodsfirst wave" = "First wave w-1",
-  "lag1_periodsstrong res" = "Strong w-1",
-  "lag1_periodsmild res" = "Mild w-1",
-  "lag1_periodslow to no res" = "Low to none w-1",
-  "periodsfirst wave" = "First wave w",
-  "periodsstrong res" = "Strong w",
-  "periodsmild res" = "Mild w",
-  "periodslow to no res" = "Low to none w"
-)
-
 p1 = all_estimates %>%
   filter(grepl("lag1_periods", variable)) %>%
   mutate(
     variable = factor(recode(variable, !!!covid_var_names), as.character(covid_var_names)),
     region = recode(region, !!!dict_regions),
-    alpha_level = ifelse(p <= 0.05, 1, 0.2)
+    alpha_level = ifelse(p <= 0.05, 1, 0.1)
   ) %>%
   ggplot(., aes(x = fct_rev(region), y = exp(Estimate), ymin = exp(q2_5), ymax = exp(q97_5), col = fct_rev(variable))) +
   facet_grid(cols = vars(bacteria)) +
   coord_flip() +
   geom_hline(yintercept = 1, linetype = "dashed", col = "grey70") +
   geom_pointrange(aes(alpha = alpha_level), position = position_dodge(width = 0.5), fatten = 1) +
-  scale_color_manual(values = rev(colorRampPalette(c("dodgerblue3", "lightblue1"))(4))) +
+  scale_color_manual(values = rev(c("dodgerblue3", "deeppink", "black", "goldenrod1"))) +
   scale_alpha_identity() +
   theme_bw() +
   theme(legend.position = "bottom", legend.title = element_blank(), legend.direction = "vertical") +
@@ -213,20 +190,28 @@ p2 = all_estimates %>%
   mutate(
     variable = factor(recode(variable, !!!covid_var_names), as.character(covid_var_names)),
     region = recode(region, !!!dict_regions),
-    alpha_level = ifelse(p <= 0.05, 1, 0.2)
+    alpha_level = ifelse(p <= 0.05, 1, 0.1)
   ) %>%
   ggplot(., aes(x = fct_rev(region), y = exp(Estimate), ymin = exp(q2_5), ymax = exp(q97_5), col = fct_rev(variable))) +
   facet_grid(cols = vars(bacteria)) +
   coord_flip() +
   geom_hline(yintercept = 1, linetype = "dashed", col = "grey70") +
   geom_pointrange(aes(alpha = alpha_level), position = position_dodge(width = 0.5), fatten = 1) +
-  scale_color_manual(values = rev(colorRampPalette(c("dodgerblue3", "lightblue1"))(4))) +
+  scale_color_manual(values = rev(c("dodgerblue3", "deeppink", "black", "goldenrod1"))) +
   scale_alpha_identity() +
   theme_bw() +
   theme(legend.position = "bottom", legend.title = element_blank(), legend.direction = "vertical") +
   expand_limits(y = c(0,5)) +
   guides(alpha = "none", color = guide_legend(reverse = T)) +
   labs(x = "", y = "Incidence rate ratio (95% CI)") 
-p = ggarrange(p1, p2, labels = c("A", "B"), widths = c(1,1.8))
+p = ggarrange(p1, p2, labels = c("A", "B"), widths = c(1.8,1))
+p
 ggsave("../Paper/Supplementary/estimates_regions_sensitivity.png", p, height = 7, width = 8)
 ggsave("plots/regressions/estimates_regions_sensitivity.png", p, height = 7, width = 8)
+
+# P-values COVID-19-related variable
+all_estimates %>%
+  filter(grepl("lag1_periods", variable),
+         region %in% c("Auvergne-Rhône-Alpes", "Grand-Est", "Provence-Alpes-Côte d'Azur", "Île-de-France")) %>%
+  dplyr::select(region, variable, Estimate, q2_5, q97_5, p) %>%
+  mutate(Estimate = exp(Estimate), q2_5 = exp(q2_5), q97_5 = exp(q97_5))

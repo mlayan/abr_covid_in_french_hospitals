@@ -14,12 +14,18 @@ load("data/bd_pmsi_icu.rda")
 load("data/bd_pmsi_regions.rda")
 
 load("data/res_hospital.rda")
+load("data/res_hospital_detailed.rda")
 load("data/res_icu.rda")
 load("data/res_regions.rda")
 
 source("R/helper/dictionaries.R")
 source("R/helper/helper_functions.R")
-source("R/helper/helper_plots.R")
+
+# All bed-days
+bd_all = bind_rows(
+  bd_pmsi_hospital %>% mutate(setting = "Hospital"),
+  bd_pmsi_icu %>% mutate(setting = "ICU")
+)
 
 ##################################################
 # Plot weekly resistance rates 
@@ -35,26 +41,67 @@ resistance_prop = bind_rows(
   dplyr::select(-data) %>%
   unnest(cfint)
 
-# Plot with anti-Covid-19 interventions periods
-ggplot(resistance_prop, aes(x = Date_week, y = res_rate, ymin = res_rate_lwr, ymax = res_rate_upr)) +
-  geom_rect(data = int_national_start_end, 
-            aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
-  geom_ribbon(fill = "grey10", alpha = 0.2) +
+ggplot(resistance_prop, aes(x = Date_week, y = res_rate)) +
+  geom_rect(data = int_national_start_end, aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
+  geom_ribbon(fill = "grey10", alpha = 0.2, aes(ymin = res_rate_lwr, ymax = res_rate_upr)) +
   geom_line() +
-  facet_grid(rows = vars(bacterie), cols = vars(setting), scales = "free_y") +
   scale_fill_manual(
     name = "Anti-COVID-19 interventions",
     labels = c("First wave", "Strong", "Intermediary", "Light to none"),
     breaks = c("p_first_wave", "p_strong_res", "p_mild_res", "p_no_res"),
     values = c("p_first_wave" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
   ) +
+  ggh4x::facet_grid2(cols = vars(setting), rows = vars(bacterie), scales = "free_y", independent = "y") +
   theme_bw() +
-  theme(legend.key = element_rect(colour = "black"), legend.position = "bottom") +
-  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) +
+  theme(
+    legend.key = element_rect(colour = "black"), 
+    legend.position = "bottom",
+    axis.title.x = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::percent) + 
+  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5),
+         col = guide_legend(title.position = "top", title.hjust = 0.5)) +
   expand_limits(y=0) +
-  labs(x = "", y = "Weekly resistance proportion (95% CI)")
+  labs(col = "Isolate type", y = "Resistance proportion") 
 ggsave("../Paper/Supplementary/weekly_resistance_proportion.png", height = 9, width = 8)
 ggsave("plots/antibiotic_resistance/weekly_resistance_proportion.png", height = 9, width = 8)
+
+# Incidence of susceptible and resistant isolates
+incidence_rates = bind_rows(
+  res_hospital %>% mutate(setting = "Hospital"),
+  res_icu %>% mutate(setting = "ICU"),
+) %>%
+  left_join(., bd_all, by = c("Date_week", "setting")) %>%
+  mutate(
+    Resistant = n_res / nbjh * 1000,
+    Susceptible = (n_tot-n_res) / nbjh * 1000
+    ) %>%
+  pivot_longer(c(Resistant, Susceptible), names_to = "Type", values_to = "Incidence")
+
+ggplot(incidence_rates, aes(x = Date_week, y = Incidence)) +
+  geom_rect(data = int_national_start_end, 
+            aes(NULL, NULL, xmin=start, xmax=end, fill=restrictions, ymin=-Inf, ymax=Inf)) +
+  geom_line(aes(col = Type)) +
+  ggh4x::facet_grid2(cols = vars(setting), rows = vars(bacterie), scales = "free_y", independent = "y") +
+  scale_fill_manual(
+    name = "Anti-COVID-19 interventions",
+    labels = c("First wave", "Strong", "Intermediary", "Light to none"),
+    breaks = c("p_first_wave", "p_strong_res", "p_mild_res", "p_no_res"),
+    values = c("p_first_wave" = col_interventions(1), "p_strong_res" = col_interventions(2), "p_mild_res" = col_interventions(3), "p_no_res" = col_interventions(4))
+  ) +
+  scale_color_manual(values = c("Resistant" = "red3", "Susceptible" = "navyblue")) +
+  theme_bw() +
+  theme(
+    legend.key = element_rect(colour = "black"), 
+    legend.position = "bottom",
+    axis.title.x = element_blank()
+      ) +
+  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5),
+         col = guide_legend(title.position = "top", title.hjust = 0.5)) +
+  expand_limits(y=0) +
+  labs(col = "Isolate type", y = "Incidence (for 1,000 occupied bed-days)") 
+ggsave("../Paper/Supplementary/weekly_resistance_susceptible_incidence.png", height = 9, width = 8)
+ggsave("plots/antibiotic_resistance/weekly_resistance_susceptible_incidence.png", height = 9, width = 8)
 
 ##################################################
 # Description of bacterial samples (Figure 3)
@@ -118,7 +165,8 @@ plot_trends = res_hospital %>%
     p_stars = case_when(p.value > 0.05 ~ "NS",
                         p.value <= 0.05 & p.value > 0.01 ~ "*",
                         p.value <= 0.01 & p.value > 0.001 ~ "**",
-                        p.value <= 0.001 ~ "***")
+                        p.value <= 0.001 & p.value > 0.0001 ~ "***",
+                        p.value <= 0.0001 ~ "****")
       ) %>%
   ggplot(., aes(x = bacterie, y = yaxis, fill = slope, label = p_stars)) +
   geom_tile() +
@@ -132,12 +180,45 @@ plot_trends = res_hospital %>%
         plot.margin = margin(5.5, 5.5, 5.5, 10, "pt")) +
   labs(y = "", fill = "Temporal trend (%)")
 
-# Temporal dynamics of weekly incidence rates 
-bd_all = bind_rows(
-  bd_pmsi_hospital %>% mutate(setting = "Hospital"),
-  bd_pmsi_icu %>% mutate(setting = "ICU")
-)
+# Prevalence variability across weeks
+res_hospital %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
+  ggplot(., aes(x = Date_year, y = n_res/n_tot)) +
+  geom_jitter() +
+  facet_wrap(facets = vars(bacterie), ncol = 2) +
+  expand_limits(ymin = 0) +
+  theme_bw() +
+  theme(axis.title.x = element_blank()) +
+  labs(y = "Weekly proportion of resistant isolates")
 
+# Prevalence variability across hospitals
+# for (b in c("CR P. aeruginosa", "ESBL E. cloacae", "ESBL E. coli", "ESBL K. pneumoniae", "MRSA")) {
+#   
+#   df = res_hospital_detailed %>%
+#     filter(bacterie == b) %>%
+#     mutate(Date_year = lubridate::year(Date_week)) %>%
+#     group_by(Date_year, code) %>%
+#     summarise(p = sum(n_res)/sum(n_tot), .groups = "drop") 
+#   
+#   out = JonckheereTerpstraTest(p ~ Date_year, df, 
+#                          alternative = "increasing",
+#                          nperm = 1000)  
+#   print(out)
+# }
+
+res_hospital_detailed %>%
+  mutate(Date_year = lubridate::year(Date_week)) %>%
+  group_by(Date_year, code, bacterie) %>%
+  summarise(p = ifelse(sum(n_tot) == 0, 0, sum(n_res)/sum(n_tot)), .groups = "drop") %>%
+  ggplot(., aes(x = Date_year, y = p)) +
+  geom_jitter() +
+  facet_wrap(facets = vars(bacterie), ncol = 2) +
+  expand_limits(ymin = 0) +
+  theme_bw() +
+  theme(axis.title.x = element_blank()) +
+  labs(y = "Weekly proportion of resistant isolates")
+
+# Temporal dynamics of weekly incidence rates 
 plot_res_i = bind_rows(
     res_hospital %>% mutate(setting = "Hospital"),
     res_icu %>% mutate(setting = "ICU"),
@@ -162,17 +243,30 @@ plot_res_i = bind_rows(
   labs(x = "", y = "Weekly incidence of resistant isolates (for 1,000 bed-days)")
 ggsave("plots/antibiotic_resistance/national_weekly_incidence.png", plot_res_i, height = 6, width = 12)
 
+# Save subpanels
+ggsave("plots/final_figures/Figure3A.pdf", tab_tot, height = 1.8, width = 4.5)
+ggsave("../Paper/Figures/Figure3A.png", tab_tot, height = 1.8, width = 4.5)
+
+ggsave("plots/final_figures/Figure3B.pdf", plot_res_p, height = 3.6, width = 4.5)
+ggsave("../Paper/Figures/Figure3B.png", plot_res_p, height = 3.6, width = 4.5)
+
+ggsave("plots/final_figures/Figure3C.pdf", plot_trends, height = 2.5, width = 4.5)
+ggsave("../Paper/Figures/Figure3C.png", plot_trends, height = 2.5, width = 4.5)
+
+ggsave("plots/final_figures/Figure3D.pdf", plot_res_i, height = 8, width = 7.5)
+ggsave("../Paper/Figures/Figure3D.png", plot_res_i, height = 8, width = 7.5)
+
 # Final figure
-figure5 = ggarrange(
+figure3 = ggarrange(
   ggarrange(tab_tot, plot_res_p, plot_trends, nrow = 3, heights = c(0.5, 1, 0.7), labels = c("A", "B", "C")), 
   plot_res_i,
   ncol = 2,
   labels = c("", 'D'),
   widths = c(0.6,1)
 )
-figure5
-ggsave("plots/Figure5.png", figure5, height = 8, width = 12)
-ggsave("../Paper/Figures/Figure5.png", figure5, height = 8, width = 12)
+figure3
+ggsave("plots/final_figures/Figure3.pdf", figure3, height = 8, width = 12)
+ggsave("../Paper/Figures/Figure3.png", figure3, height = 8, width = 12)
 
 ##################################################
 # Comparison with annual incidence rate reported
@@ -230,5 +324,3 @@ for (b in unique(res_hospital$bacterie)) {
   ggsave(paste0("plots/antibiotic_resistance/", gsub(" ", "", b), "_region.png"), 
          p, height = 6, width = 11)
 }
-
-

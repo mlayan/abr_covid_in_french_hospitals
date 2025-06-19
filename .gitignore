@@ -6,6 +6,9 @@
 .RData
 .RDataTmp
 
+# MacOS files
+.DS_Store
+
 # User-specific files
 .Ruserdata
 
@@ -54,6 +57,7 @@ data-raw/atih/
 data-raw/communes/
 data-raw/drees/
 data-raw/earsnet/
+data-raw/eucast/
 data-raw/interventions/
 data-raw/sidep/
 data-raw/sivic/
@@ -74,6 +78,7 @@ data/atb_use_hospital_level.rda
 
 # Additional analyses
 R/analyses/others/
+R/analyses/first_version/
 
 # SAS functions
 sas/
@@ -84,15 +89,15 @@ R/analyses/1.convert_sas_db.R
 R/analyses/2.patient_sample_selection.R
 R/analyses/2.patient_sample_selection_strepto_azi.R
 R/analyses/2bis.patient_sample_selection_final_cohort.R
+R/analyses/3bis.data_improvements.R
 R/analyses/3.final_numbers.R
 R/analyses/4.cohort_representativity.R
 R/analyses/5.save_aggregated_data.R
 R/analyses/6.interventions.R
-R/analyses/7.intubation_data.R
 R/analyses/16.enterococci.R
 R/analyses/17.enterococci_time_series.R
 
 # Plots
-plots/atlas/
-plots/saint_joseph_saint_luc/
 plots/pmsi_data_cleaning/
+plots/saint_joseph_saint_luc/
+

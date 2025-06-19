@@ -1,3 +1,5 @@
+
+
 # Get the number of repeated events per patient
 getRepeatedEvents = function(nosocomial, idsite) {
   diff_site_same_origin = 0
@@ -397,6 +399,191 @@ getBinomCI = function(d, sides, method) {
   return(out)
 }
 
+# Function to plot antibiotic consumption per year and region
+atbplot = function(df, atbclass, level = "regional", facet_type = "geographic") {
+  
+  # Color gradient of the significance level for the Friedman test
+  colfunc <- colorRampPalette(c("floralwhite", "deepskyblue4"))
+  
+  if (level == "regional") {
+    # Consumption per antibiotic class
+    df_final = df %>%
+      group_by(code, Date_year, region) %>%
+      summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop")
+    m = max(df_final$consumption)
+    
+    # P value of Friedman test
+    pvals = df_final %>%
+      group_by(region) %>%
+      friedman_test(consumption ~ Date_year | code) %>%
+      mutate(p_sign = factor(case_when(
+        p > 0.05 ~ "n.s.",
+        p <= 0.05 & p > 0.01 ~ "*",
+        p <= 0.01 & p > 0.001 ~ "**",
+        p <= 0.001 & p > 0.0001 ~ "***",
+        p <= 0.0001 ~ "****"
+      ), 
+      levels = c("n.s.", "*", "**", "***", "****"),
+      labels = c("n.s.", "*", "**", "***", "****")
+      ))
+    
+    # Mean consumption per region and year
+    df_mean = df_final %>%
+      group_by(Date_year, region) %>%
+      summarise(consumption = mean(consumption), .groups = "drop") %>%
+      left_join(., pvals %>% select(region, p_sign), by = "region")
+    
+    # Significance levels of multiple comparison tests
+    df_comp = df_final %>%
+      arrange(code, Date_year) %>%
+      group_by(region) %>%
+      wilcox_test(
+        consumption ~ Date_year, 
+        paired = T, 
+        p.adjust.method = "BH", 
+        alternative = "two.sided",
+        conf.level = 1-0.05,
+        detailed = T
+      ) %>%
+      mutate(group1 = factor(group1), group2 = factor(group2)) %>%
+      filter(p.adj <= 0.05, group1 == "2019") %>%
+      mutate(y = case_when(group2 == "2020" ~ m/2, group2 == "2021" ~ m*2/3, group2 == "2022" ~ m*5/6)) %>%
+      mutate(p.adj = ifelse(p.adj<0.0001, "<0.0001", format(round(p.adj, 4), nsmall = 4)))
+    
+    # Plot
+    out = ggplot(df_final, aes(x = as.factor(Date_year))) +
+      geom_line(alpha = 0.1, aes(y = consumption, group = code)) +
+      geom_point(data = df_mean, aes(x = as.factor(Date_year), y = consumption, fill = p_sign), 
+                 col = "black", pch=21, size = 3, stroke = 0.2) +
+      geom_signif(data = df_comp, aes(xmin = group1, xmax = group2, annotations = p.adj,
+                                      y_position = y),
+                  manual = T, textsize = 3, vjust = -0.2) +
+      theme_bw() +
+      scale_fill_manual(
+        limits = c("n.s.", "*", "**", "***", "****"),
+        values = colfunc(5),
+        name = "Friedman test p-value") +
+      theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom", legend.title = element_text(hjust=0.5)) +
+      guides(fill = guide_legend(title.position = "top")) +
+      labs(x = "", y = "Annual antibiotic consumption\n(DDD/1,000 bed days)")
+    
+    if (facet_type == "geographic") out = out + facet_geo(~ region, grid = my_regional_grid)
+    if (facet_type == "alphabetical") out = out + facet_wrap(facets = vars(region), ncol = 4)
+    return(out)
+  }
+  
+  if (level == "type") {
+    # Consumption per antibiotic class
+    df = df %>%
+      mutate(consumption = molDDD/Nbhosp*1000)
+    df_max = df %>%
+      group_by(type) %>%
+      summarise(m = max(consumption), .groups = "drop")
+    
+    # P value of Friedman test
+    pvals = df %>%
+      group_by(type) %>%
+      friedman_test(consumption ~ Date_year | code) %>%
+      mutate(p_sign = factor(case_when(
+        p > 0.05 ~ "n.s.",
+        p <= 0.05 & p > 0.01 ~ "*",
+        p <= 0.01 & p > 0.001 ~ "**",
+        p <= 0.001 & p > 0.0001 ~ "***",
+        p <= 0.0001 ~ "****"
+      ), 
+      levels = c("n.s.", "*", "**", "***", "****"),
+      labels = c("n.s.", "*", "**", "***", "****")
+      ))
+    
+    # Mean consumption per type and year
+    df_mean = df %>%
+      group_by(Date_year, type) %>%
+      summarise(consumption = mean(consumption), .groups = "drop") %>%
+      left_join(., pvals %>% select(type, p_sign), by = "type")
+    
+    # Significance levels of multiple comparison tests
+    df_comp = df %>%
+      arrange(code, Date_year) %>%
+      group_by(type) %>%
+      wilcox_test(
+        consumption ~ Date_year, 
+        paired = T, 
+        p.adjust.method = "BH", 
+        alternative = "two.sided",
+        conf.level = 1-0.05,
+        detailed = T
+      ) %>%
+      mutate(group1 = factor(group1), group2 = factor(group2)) %>%
+      filter(p.adj <= 0.05, group1 == "2019") %>%
+      left_join(., df_max, by = "type") %>%
+      mutate(y = case_when(group2 == "2020" ~ m/2, group2 == "2021" ~ m*2/3, group2 == "2022" ~ m*5/6))
+    
+    # Plot
+    out = ggplot(df, aes(x = as.factor(Date_year))) +
+      geom_line(alpha = 0.1, aes(y = consumption, group = code)) +
+      geom_point(data = df_mean, aes(x = as.factor(Date_year), y = consumption, fill = p_sign), 
+                 col = "black", pch=21, size = 2, stroke = 0.2) +
+      geom_signif(data = df_comp, aes(xmin = group1, xmax = group2, annotations = format(round(p.adj, 4), nsmall = 4),
+                                      y_position = y),
+                  manual = T, textsize = 3, vjust = -0.2) +
+      facet_wrap(facets = vars(type), ncol = 3, scales = "free_y") +
+      theme_bw() +
+      scale_fill_manual(
+        limits = c("n.s.", "*", "**", "***", "****"),
+        values = colfunc(5),
+        name = "Friedman test p-value") +
+      theme(plot.title = element_text(hjust = 0.5), legend.title = element_text(hjust = 0.5), legend.position = "bottom") +
+      guides(col = guide_legend(title.position = "top")) +
+      labs(x = "", y = "Annual antibiotic consumption\n(DDD/1,000 bed days)", 
+           title = atbclass)
+    return(out)
+  }
+  
+  if (level == "national") {
+    df_final = df %>%
+      mutate(consumption = molDDD / Nbhosp * 1000) %>%
+      arrange(code, Date_year) %>%
+      group_by(code) %>%
+      mutate(n = n()) %>%
+      ungroup() %>%
+      filter(n == 4)
+    m = max(df$consumption)
+    
+    df_mean = df %>%
+      group_by(Date_year) %>%
+      summarise(consumption = mean(consumption), .groups = "drop")
+    
+    df_comp = df %>%
+      arrange(code, Date_year) %>%
+      wilcox_test(
+        consumption ~ Date_year, 
+        paired = T, 
+        p.adjust.method = "BH", 
+        alternative = "two.sided",
+        conf.level = 1-0.05,
+        detailed = T
+      ) %>%
+      mutate(group1 = factor(group1), group2 = factor(group2)) %>%
+      filter(p.adj <= 0.05, group1 == "2019") %>%
+      mutate(y = case_when(group2 == "2020" ~ m/2, group2 == "2021" ~ m*2/3, group2 == "2022" ~ m*5/6))
+    
+    out = ggplot() +
+      geom_line(data = df_final, aes(x = factor(Date_year), y = consumption, group = code), alpha = 0.1) +
+      geom_point(data = df_mean, aes(x = factor(Date_year), y = consumption), col = "red") +
+      geom_signif(data = df_comp, aes(xmin = group1, xmax = group2, annotations = p.adj, y_position = y), 
+                  manual = T) +
+      theme_bw() +
+      labs(x = "", y = "Annual antibiotic consumption\n(DDD/1,000 hospitalisation days)", 
+           title = atb_class)
+    return(out)
+  }
+}
+
+# Get color for the corresponding level of anti-COVID-19 intervention
+col_interventions <- function(i) { 
+  paste0(colorRampPalette(c("steelblue4", "ivory"))(4)[i], "99")
+}
+
 
 
 # Function to get the p value of the Friedman test 
@@ -448,13 +635,14 @@ atbpval = function(df, level = "regional") {
 
 # Function to get the p value of the Wilcoxon 
 # multiple comparison tests
-atbmulcomp = function(df, level = "regional") {
+atbmulcomp = function(df, adjustment = "BH", cohort = T) {
   
-  if (level == "regional") {
-  }
+  out = NA
+  if (adjustment == "BH") adjustment_conf_level = 0.95
+  if (adjustment == "bonferroni") adjustment_conf_level = 1-0.05/6
   
-  if (level == "national") {
-    df %>%
+  if (cohort) {
+    out = df %>%
       mutate(consumption = molDDD/Nbhosp*1000) %>%
       group_by(code) %>%
       mutate(n = n()) %>%
@@ -464,14 +652,34 @@ atbmulcomp = function(df, level = "regional") {
       wilcox_test(
         consumption ~ Date_year, 
         paired = T, 
-        p.adjust.method = "bonferroni",
+        p.adjust.method = adjustment,
         comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
         alternative = "two.sided",
-        conf.level = 1-0.05/3,
-        detailed = T
+        conf.level = adjustment_conf_level,
+        detailed = T, 
+        exact = T
       ) %>%
       select(group1, group2, p.adj, estimate, conf.low, conf.high)
   }
+  
+  if (!cohort) {
+    out = df %>%
+      mutate(consumption = molDDD/Nbhosp*1000) %>%
+      arrange(code, Date_year) %>%
+      wilcox_test(
+        consumption ~ Date_year, 
+        paired = F, 
+        p.adjust.method = adjustment,
+        comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
+        alternative = "two.sided",
+        conf.level = adjustment_conf_level,
+        detailed = T, 
+        exact = T
+      ) %>%
+      select(group1, group2, p.adj, estimate, conf.low, conf.high)
+  }
+  
+  return(out)
   
 }
 

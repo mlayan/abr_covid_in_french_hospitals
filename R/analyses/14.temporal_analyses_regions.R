@@ -15,7 +15,6 @@ library(gt)
 
 # Helper functions
 source("R/helper/helper_functions.R")
-source("R/helper/helper_plots.R")
 source("R/helper/dictionaries.R")
 
 ##################################################
@@ -30,8 +29,8 @@ int_region = int_region %>%
   mutate(
     periods = case_when(
       p_strong_res + p_mild_res + p_no_res + p_first_wave == 0 ~ "pre-pandemic",
-      p_first_wave > 0.5 ~ "first wave", #  & Date_week <= as.Date("2020-04-13") 
-      p_strong_res > 0.5 ~ "strong res", # | (p_first > 0.5 & Date_week > as.Date("2020-04-13")) 
+      p_first_wave > 0.5 ~ "first wave",
+      p_strong_res > 0.5 ~ "strong res", 
       p_mild_res > 0.5 ~ "mild res",
       p_no_res > 0.5 ~ "low to no res",
       .default = NA
@@ -59,8 +58,8 @@ atb_use_regions = atb_use_regions %>%
 # Bed-days
 load("data/bd_pmsi_regions.rda")
 
-# Covid-19 intubation data
-load("data/covid_intub_region.rda")
+# Covid-19 data
+load("data/covid_region.rda")
 
 ##################################################
 # Combine data 
@@ -69,24 +68,24 @@ regional_df = res_regions %>%
   filter(bacterie %in% c("CR P. aeruginosa", "ESBL E. coli", "MRSA")) %>%
   left_join(., int_region, by = c("Date_week", "region")) %>%
   left_join(., bd_pmsi_regions, by = c("Date_week", "region")) %>%
-  left_join(., covid_intub_region, by = c("Date_week", "region")) %>%
+  left_join(., covid_region, by = c("Date_week", "region")) %>%
   mutate(
     Date_year = lubridate::year(Date_week),
-    covid_intub = ifelse(is.na(covid_intub), 0, covid_intub)
+    covid = ifelse(is.na(covid), 0, covid)
   ) %>%
   left_join(., atb_use_regions, by = c("Date_year", "region")) %>%
-  mutate(covid_intub_prev = covid_intub / nbjh * 1000)
+  mutate(covid_prev = covid / nbjh * 1000)
 
 ##################################################
 # Regions most affected by the pandemic
 ##################################################
 df = bd_pmsi_regions %>%
-  left_join(., covid_intub_region, by = c("Date_week", "region")) %>%
+  left_join(., covid_region, by = c("Date_week", "region")) %>%
   mutate(Date_year = lubridate::year(Date_week),
          region = recode(region, !!!dict_regions),
-         covid_intub = ifelse(is.na(covid_intub), 0, covid_intub)) %>%
+         covid = ifelse(is.na(covid), 0, covid)) %>%
   group_by(Date_year, region) %>%
-  summarise(p = sum(covid_intub)/sum(nbjh)*1000, .groups = "drop") %>%
+  summarise(p = sum(covid)/sum(nbjh)*1000, .groups = "drop") %>%
   arrange(Date_year, desc(p)) %>%
   group_by(Date_year) %>%
   mutate(o = 1:n()) %>%
@@ -140,11 +139,11 @@ p_covid = plot_grid(
 regional_df %>% 
   filter(bacterie == "CR P. aeruginosa") %>%
   mutate(region = recode(region, !!!dict_regions)) %>%
-  ggplot(., aes(x = Date_week, y = covid_intub_prev)) +
+  ggplot(., aes(x = Date_week, y = covid_prev)) +
   geom_line() +
   facet_wrap(facets = vars(region), ncol = 4) +
   theme_bw() +
-  labs(x = "", y = "Intubated COVID-19 patients prevalence (per 1,000 bed-days)")
+  labs(x = "", y = "COVID-19 patients prevalence (per 1,000 bed-days)")
 
 ##################################################
 # Regression analysis
@@ -179,12 +178,13 @@ for (i in 1:nrow(results)) {
     arrange(Date_week) %>%
     mutate(
       lag1_i_res = lag(n_res / nbjh * 1000),
-      lag2_covid_intub_prev = lag(covid_intub_prev, 2)
+      lag1_periods = lag(periods, 1),
+      lag2_covid_prev = lag(covid_prev, 2)
     ) %>% 
-    filter(!is.na(lag2_covid_intub_prev)) %>%
+    filter(!is.na(lag2_covid_prev)) %>%
     mutate(
       lag1_i_res = (lag1_i_res - mean(lag1_i_res)) / sd(lag1_i_res),
-      lag2_covid_intub_prev = (lag2_covid_intub_prev - mean(lag2_covid_intub_prev)) / sd(lag2_covid_intub_prev),
+      lag2_covid_prev = (lag2_covid_prev - mean(lag2_covid_prev)) / sd(lag2_covid_prev),
       
       Carbapenems = (Carbapenems - mean(Carbapenems)) / sd(Carbapenems),      
       Penicillins = (Penicillins - mean(Penicillins)) / sd(Penicillins),
@@ -202,8 +202,12 @@ for (i in 1:nrow(results)) {
     if (b == "MRSA") m_eq = "n_res ~ lag1_i_res + periods + Penicillins + offset(log(nbjh))"
   }
   
+  if (mod == "model2") {
+    m_eq = "n_res ~ lag1_i_res + lag1_periods + TGC + offset(log(nbjh))"
+  }
+  
   if (mod == "model6") {
-    m_eq = "n_res ~ lag1_i_res + lag2_covid_intub_prev + Carbapenems + offset(log(nbjh))"
+    m_eq = "n_res ~ lag1_i_res + lag2_covid_prev + Carbapenems + offset(log(nbjh))"
   }
   
   if (check_overdispersion(glm(m_eq, family = poisson, data = final_db))$p_value > 0.05) {
@@ -249,35 +253,16 @@ for (i in 1:nrow(results)) {
   all_fits = bind_rows(all_fits, mod_fit)
 }
 
-
-# Is poisson necessary
-results %>%
-  filter(poisson_OD > 0.05)
-
-# P-values COVID-19-related variable
-all_estimates %>%
-  filter(variable == "lag2_covid_intub_prev",
-         region %in% c("Auvergne-Rhône-Alpes", "Grand-Est", "Provence-Alpes-Côte d'Azur", "Île-de-France")) %>%
-  dplyr::select(region, Estimate, q2_5, q97_5, p)
-
-
 ##################################################
 # Final plot
 ##################################################
-var_names = c(
-  "lag2_covid_intub_prev" = "COVID-19 intub. prev. w-2", 
-  "periodsfirst wave" = "First wave w", 
-  "periodsstrong res" = "Strong w", 
-  "periodsmild res" = "Mild w", 
-  "periodslow to no res" = "Low to none w"
-)
-
 # Specific case of CR-PA (not on the same scale compared to 
 # ESBL E. coli and MRSA + not the same COVID-19 related variables)
+all_estimates
 model6_estimates_crpa = all_estimates %>%
-  filter(variable == "lag2_covid_intub_prev", bacteria == "CR P. aeruginosa") %>%
+  filter(variable == "lag2_covid_prev", bacteria == "CR P. aeruginosa") %>%
   mutate(
-    variable = factor(recode(variable, !!!var_names), unname(var_names)),
+    variable = factor(recode(variable, !!!covid_var_names), unname(covid_var_names)),
     region = recode(region, !!!dict_regions),
     alpha_level = ifelse(p <= 0.05, 1, 0.2)
   ) %>%
@@ -296,9 +281,9 @@ model6_estimates_crpa = all_estimates %>%
   
 # ESBL-E. coli and MRSA estimates 
 model6_estimates_other = all_estimates %>%
-    filter(variable %in% names(var_names), bacteria %in% c("MRSA", "ESBL E. coli")) %>%
+    filter(variable %in% names(covid_var_names), bacteria %in% c("MRSA", "ESBL E. coli")) %>%
     mutate(
-      variable = factor(recode(variable, !!!var_names), unname(var_names)),
+      variable = factor(recode(variable, !!!covid_var_names), unname(covid_var_names)),
       region = recode(region, !!!dict_regions),
       alpha_level = ifelse(p <= 0.05, 1, 0.2)
     ) %>%
@@ -319,18 +304,49 @@ model6_estimates_other = all_estimates %>%
     theme(axis.title.y = element_blank(), legend.position = "bottom", legend.title = element_blank()) +
     guides(alpha = "none", color = guide_legend(reverse=T)) +
     labs(y = "Incidence rate ratio (95% CI)") 
-  
 
-# Save figure 7
-figure7 = plot_grid(
+# Save figure subpanels
+load("plots/figure_composite.rda")
+
+ggsave("../Paper/Figures/Figure4A.png", covid_estimates + theme(legend.position = "none"), height = 3.7, width = 4.5)
+ggsave("plots/final_figures/Figure4A.pdf", covid_estimates + theme(legend.position = "none"), height = 3.7, width = 4.5)
+
+ggsave("../Paper/Figures/Figure4B.png", other_estimates + theme(legend.position = "none"), height = 3.7, width = 4.5)
+ggsave("plots/final_figures/Figure4B.pdf", other_estimates + theme(legend.position = "none"), height = 3.7, width = 4.5)
+
+ggsave("../Paper/Figures/Figure4C.png", model6_estimates_crpa, height = 4.6, width = 3.2)
+ggsave("plots/final_figures/Figure4C.pdf", model6_estimates_crpa, height = 4.6, width = 3.2)
+
+ggsave("../Paper/Figures/Figure4D.png", model6_estimates_other, height = 4.6, width = 5.8)
+ggsave("plots/final_figures/Figure4D.pdf", model6_estimates_other, height = 4.6, width = 5.8)
+
+ggsave("../Paper/Figures/Figure4E.png", plot_grid(p2020, p2021, p2022, ncol = 3), height = 2.8, width = 7)
+ggsave("plots/final_figures/Figure4E.pdf", plot_grid(p2020, p2021, p2022, ncol = 3), height = 2.8, width = 7)
+
+# Final figure with results on national and regional data
+figure4 = plot_grid(
+  plot_grid(
+    covid_estimates + theme(legend.position = "none"),
+    other_estimates + theme(legend.position = "none"),
+    ncol = 2, 
+    labels = c("A", "B")
+  ),
+  ggpubr::get_legend(other_estimates),
   plot_grid(model6_estimates_crpa, model6_estimates_other, 
-            ncol = 2, rel_widths = c(1, 1.8), labels = c("A", "B")), 
-  plot_grid(p2020, p2021, p2022, ncol = 3, labels = c("C", "", "")),
+            ncol = 2, rel_widths = c(1, 1.8), labels = c("C", "D")), 
+  plot_grid(p2020, p2021, p2022, ncol = 3, labels = c("E", "", "")),
   p_title,
-  nrow = 3,
-  rel_heights = c(1.5, 1, 0.05)
+  nrow = 5,
+  rel_heights = c(1.2, 0.2, 1.5, 0.9, 0.1)
 )
-figure7
-ggsave("../Paper/Figures/Figure7.png", figure7, height = 9, width = 7)
-ggsave("plots/Figure7.png", figure7, height = 9, width = 7)
+figure4
+ggsave("../Paper/Figures/Figure4.png", figure4, height = 12, width = 9)
+ggsave("plots/final_figures/Figure4.pdf", figure4, height = 12, width = 9)
+
+# P-values COVID-19-related variable
+all_estimates %>%
+  filter(variable == "lag2_covid_prev",
+         region %in% c("Centre-Val de Loire", "Grand-Est", "Île-de-France", "Occitanie")) %>%
+  dplyr::select(region, Estimate, q2_5, q97_5, p) %>%
+  mutate(p = round(p, 4))
 

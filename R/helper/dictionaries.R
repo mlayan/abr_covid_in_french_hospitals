@@ -447,7 +447,70 @@ model_names = c(
   "model1" = "Pandemic periods w",
   "model2" = "Pandemic periods w-1",
   "model3" = "Pandemic periods w-2",
-  "model4" = "Covid-19 intubation prevalence w", 
-  "model5" = "Covid-19 intubation prevalence w-1", 
-  "model6" = "Covid-19 intubation prevalence w-2"
+  "model4" = "Covid-19 prevalence w", 
+  "model5" = "Covid-19 prevalence w-1", 
+  "model6" = "Covid-19 prevalence w-2"
 )
+
+# Hospital types
+hospital_types_dict = c(
+"Centre Hospitalier (C.H.)",
+"Centre Hospitalier Régional (C.H.R.)",
+"Centre de Médecine Sportive",
+"Centre de Médecine Universitaire",
+"Centre de Médecine collective",
+"Centre de Santé",
+"Centre hospitalier, ex Hôpital local",
+"Etablissement Soins Obstétriques Chirurgico-Gynécologiques",
+"Etablissement de Soins Chirurgicaux",
+"Etablissement de Soins Médicaux",
+"Etablissement de Soins Pluridisciplinaire",
+"Etablissement de santé privé autorisé en SSR",
+"Groupement de coopération sanitaire - Etablissement de santé",
+"Groupement de coopération sanitaire de moyens",
+"Groupement de coopération sanitaire de moyens - Exploitant",
+"Installation autonome de chirurgie esthétique"
+)
+
+# COVID-19 parameters names
+covid_var_names = c(
+  'periodsfirst wave' = "First wave w",
+  'periodsstrong res' = "Strong w",
+  'periodsmild res' = "Mild w",
+  'periodslow to no res' = "Low to none w",
+  
+  'lag1_periodsfirst wave' = "First wave w-1",
+  'lag1_periodsstrong res' = "Strong w-1",
+  'lag1_periodsmild res' = "Mild w-1",
+  'lag1_periodslow to no res' = "Low to none w-1",
+  
+  "lag2_periodsfirst wave" = "First wave w-2",
+  "lag2_periodsstrong res" = "Strong w-2",
+  "lag2_periodsmild res" = "Mild w-2",
+  "lag2_periodslow to no res" = "Low to none w-2",
+  
+  "lag2_covid_prev" = "Covid-19 prev. w-2"
+)
+
+# Model parameters names
+var_names = c(
+  "(Intercept)" = "Intercept",
+  "lag1_i_res" = "Incidence w-1",
+  
+  "periodsfirst wave" = "Pandemic periods",
+  "periodsstrong res" = "Pandemic periods",
+  "periodsmild res" = "Pandemic periods",
+  "periodslow to no res" = "Pandemic periods",
+  
+  "lag1_periodsfirst wave" = "Pandemic periods w-1",
+  "lag1_periodsstrong res" = "Pandemic periods w-1",
+  "lag1_periodsmild res" = "Pandemic periods w-1",
+  "lag1_periodslow to no res" = "Pandemic periods w-1",
+  
+  "lag2_covid_prev" = "Covid-19 prev. w-2",
+  
+  "Penicillins" = "Penicillins",
+  "TGC" = "3rd generation Cephalosporins",
+  "Carbapenems" = "Imipenem + Meropenem"
+)
+

@@ -1,8 +1,8 @@
 # Impact of the COVID-19 pandemic on antibiotic resistance in French hospitals : a retrospective ecological study using national surveillance data
 
-<a href=""><img src="" alt="DOI"></a>
+<!--a href="https://doi.org/10.1101/2024.12.04.24317990"><img src="" alt="DOI"></a-->
 
-Full text and supplementary materials are available [here]().
+Full text is available [here](https://doi.org/10.1101/2024.12.04.24317990), and Supplementary Materials [here](https://www.medrxiv.org/content/10.1101/2024.12.04.24317990v1.supplementary-material).
 
 ## Usage
 

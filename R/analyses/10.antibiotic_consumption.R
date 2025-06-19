@@ -13,7 +13,6 @@ library(sf)
 
 source("R/helper/dictionaries.R")
 source("R/helper/helper_functions.R")
-source("R/helper/helper_plots.R")
 
 ##################################################
 # Load data
@@ -89,8 +88,8 @@ p2 = ggplot(consumption_icu, aes(x = Date_year, y = consumption, group = code)) 
 # Final figure 
 figure3 = ggarrange(p1, p2, nrow = 2, labels = c("A", "B"))
 figure3
-ggsave("../Paper/Figures/Figure3.png", figure3, height = 10, width = 10)
-ggsave("plots/Figure3.png", figure3, height = 10, width = 10)
+ggsave("../Paper/Supplementary/annual_antibiotic_consumption_facility.png", figure3, height = 10, width = 10)
+ggsave("plots/antibiotic_use/annual_antibiotic_consumption_facility.png", figure3, height = 10, width = 10)
 
 # All hospitals reported antibiotic consumption by class every year
 consumption_hospital %>%
@@ -113,207 +112,212 @@ atb_class_names2 = c("Aminoglycosides", "Carbapenems", "Imipenem + Meropenem", "
                      "Azithromycin", "Monobactams", "Oxazolidinones", "Penicillins", "Polymyxins", 
                      "Quinolones", "Tetracyclines", "Trimethoprim", "Total")
 
-# Hospital consumption
-atb_use_hospital_level_agg = atb_use_hospital_level %>%
-  filter(atb_class %in% atb_class_names2) %>%
-  group_by(code, Date_year, atb_class) %>%
-  summarise(molDDD = sum(molDDD), Nbhosp = sum(Nbhosp), .groups = "drop") %>%
-  mutate(atb_class = factor(atb_class, atb_class_names2))
+adjustment_estimate = c("BH" = "Estimate (95% CI)", "bonferroni" = "Estimate (98.3% CI)")
+adjustment_footnote1 = c("BH" = "Estimates and their 95% CI in bold have a p-value≤0.05", "bonferroni" = "Estimates and their 98·3% CI in bold have a p-value≤0·05")
+adjustment_footnote3 = c("BH" = "P-value adjusted with the Benjamini-Hochberg procedure", "bonferroni" = "Adjusted p-value with Bonferroni correction")
 
-national_2019_ref_year = atb_use_hospital_level_agg %>%
-  group_by(atb_class) %>%
-  nest() %>%
-  mutate(
-    p_f = map(data, atbpval, level = "national"),
-    mul_comp = map(data, atbmulcomp, level = "national")
-  ) %>%
-  select(-data) %>%
-  unnest(c(p_f, mul_comp)) %>%
-  ungroup() %>%
-  mutate(
-    comparison = paste0(group1, "vs", group2),
-    conf_int = ifelse( -conf.low > -conf.high,
-                       paste0(-round(estimate, 1), " (", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
-                       paste0(-round(estimate, 1), " (", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
-    ),
-    p.adj.bis = round(p.adj, 3),
-    p.adj = ifelse(p.adj < 0.001, "<0.001", round(p.adj, 3)),
-    p_f = ifelse(p_f < 0.001, "<0.001", round(p_f, 3))
-  ) %>%
-  select(atb_class, p_f, comparison, conf_int, p.adj, p.adj.bis) %>%
-  pivot_wider(names_from = comparison, values_from = c(conf_int, p.adj, p.adj.bis)) %>%
-  arrange(atb_class) %>%
-  mutate(atb_class = as.character(atb_class)) %>%
-  mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
-         .after = 1)
-
-# Hospital consumption table
-hospital_tab = national_2019_ref_year %>%
-  gt(.) %>%
-  cols_hide(
-    columns = c(p.adj.bis_2019vs2020, p.adj.bis_2019vs2021, p.adj.bis_2019vs2022)
-  ) %>%
-  tab_spanner(
-    label = "2019 vs 2020",
-    columns = c(conf_int_2019vs2020, `p.adj_2019vs2020`)
-  ) %>%
-  tab_spanner(
-    label = "2019 vs 2021",
-    columns = c(conf_int_2019vs2021, `p.adj_2019vs2021`)
-  ) %>%
-  tab_spanner(
-    label = "2019 vs 2022",
-    columns = c(conf_int_2019vs2022, `p.adj_2019vs2022`)
-  ) %>%
-  cols_label(
-    p_f = "Friedman test p-value",
-    conf_int_2019vs2020 = "Estimate (98.3% CI)", 
-    `p.adj_2019vs2020` = "p-value",
-    conf_int_2019vs2021 = "Estimate (98.3% CI)", 
-    `p.adj_2019vs2021` = "p-value",
-    conf_int_2019vs2022 = "Estimate (98.3% CI)", 
-    `p.adj_2019vs2022` = "p-value",
-    atb_class = "",
-    DCI = ""
-  ) %>%
-  tab_style(
-    style = list(
-      cell_text(weight = "bold")
-    ),
-    locations = list(
-      cells_body(
-        rows = p.adj.bis_2019vs2020 <= 0.05,
-        columns = conf_int_2019vs2020
+for (adjustment in c("BH", "bonferroni")) {
+  
+  # Multiple comparison tests and Friedman test at the hospital level
+  hospital_tab = atb_use_hospital_level %>%
+    filter(atb_class %in% atb_class_names2) %>%
+    group_by(code, Date_year, atb_class) %>%
+    summarise(molDDD = sum(molDDD), Nbhosp = sum(Nbhosp), .groups = "drop") %>%
+    mutate(atb_class = factor(atb_class, atb_class_names2)) %>%
+    nest(.by = atb_class) %>%
+    mutate(
+      p_f = map(data, atbpval, level = "national"),
+      mul_comp = map(data, atbmulcomp, adjustment = adjustment)
+    ) %>%
+    select(-data) %>%
+    unnest(c(p_f, mul_comp)) %>%
+    ungroup() %>%
+    mutate(
+      comparison = paste0(group1, "vs", group2),
+      conf_int = ifelse( -conf.low > -conf.high,
+                         paste0(-round(estimate, 1), " (", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
+                         paste0(-round(estimate, 1), " (", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
       ),
-      cells_body(
-        rows = p.adj.bis_2019vs2021 <= 0.05,
-        columns = conf_int_2019vs2021
+      p.adj.bis = format(round(p.adj, 4), nsmall = 4),
+      p.adj = ifelse(p.adj < 0.0001, "<0.0001", format(round(p.adj, 4), nsmall = 4)),
+      p_f = ifelse(p_f < 0.0001, "<0.0001", format(round(p_f, 4), nsmall = 4))
+    ) %>%
+    select(atb_class, p_f, comparison, conf_int, p.adj, p.adj.bis) %>%
+    pivot_wider(names_from = comparison, values_from = c(conf_int, p.adj, p.adj.bis)) %>%
+    arrange(atb_class) %>%
+    mutate(atb_class = as.character(atb_class)) %>%
+    mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
+           .after = 1) %>%
+    gt(.) %>%
+    cols_hide(
+      columns = c(p.adj.bis_2019vs2020, p.adj.bis_2019vs2021, p.adj.bis_2019vs2022)
+    ) %>%
+    tab_spanner(
+      label = "2019 vs 2020",
+      columns = c(conf_int_2019vs2020, `p.adj_2019vs2020`)
+    ) %>%
+    tab_spanner(
+      label = "2019 vs 2021",
+      columns = c(conf_int_2019vs2021, `p.adj_2019vs2021`)
+    ) %>%
+    tab_spanner(
+      label = "2019 vs 2022",
+      columns = c(conf_int_2019vs2022, `p.adj_2019vs2022`)
+    ) %>%
+    cols_label(
+      p_f = "Friedman test p-value",
+      conf_int_2019vs2020 = adjustment_estimate[adjustment], 
+      `p.adj_2019vs2020` = "p-value",
+      conf_int_2019vs2021 = adjustment_estimate[adjustment],
+      `p.adj_2019vs2021` = "p-value",
+      conf_int_2019vs2022 = adjustment_estimate[adjustment],
+      `p.adj_2019vs2022` = "p-value",
+      atb_class = "",
+      DCI = ""
+    ) %>%
+    tab_style(
+      style = list(
+        cell_text(weight = "bold")
       ),
-      cells_body(
-        rows = p.adj.bis_2019vs2022 <= 0.05,
-        columns = conf_int_2019vs2022
-      ),
-      cells_column_spanners(),
-      cells_column_labels()
+      locations = list(
+        cells_body(
+          rows = p.adj.bis_2019vs2020 <= 0.05,
+          columns = conf_int_2019vs2020
+        ),
+        cells_body(
+          rows = p.adj.bis_2019vs2021 <= 0.05,
+          columns = conf_int_2019vs2021
+        ),
+        cells_body(
+          rows = p.adj.bis_2019vs2022 <= 0.05,
+          columns = conf_int_2019vs2022
+        ),
+        cells_column_spanners(),
+        cells_column_labels()
+      )
+    ) %>%
+    tab_options(table.font.size = 11) %>%
+    tab_footnote(
+      footnote = adjustment_footnote1[adjustment],
+      locations = cells_column_labels(columns = c(conf_int_2019vs2020, conf_int_2019vs2021, conf_int_2019vs2022))
+    ) %>%
+    tab_footnote(
+      footnote = "Corresponds to trimethoprim and combinations of sulfanomides",
+      locations = cells_body(rows = atb_class == "Trimethoprim", columns = atb_class)
+    ) %>%
+    tab_footnote(
+      footnote = adjustment_footnote3[adjustment],
+      locations = cells_column_labels(columns = c(p.adj_2019vs2020, p.adj_2019vs2021, p.adj_2019vs2022))
+    ) %>%
+    sub_values(
+      columns = atb_class,
+      rows = DCI != "",
+      replacement = "",
+      pattern = "Imipenem \\+ Meropenem|Azithromycin|Vancomycin"
     )
-  ) %>%
-  tab_options(table.font.size = 11) %>%
-  tab_footnote(
-    footnote = "Corresponds to trimethoprim and combinations of sulfanomides",
-    locations = cells_body(rows = atb_class == "Trimethoprim", columns = atb_class)
-  ) %>%
-  tab_footnote(
-    footnote = "Adjusted p-value with Bonferroni correction",
-    locations = cells_column_labels(columns = c(p.adj_2019vs2020, p.adj_2019vs2021, p.adj_2019vs2022))
-  ) %>%
-  sub_values(
-    columns = atb_class,
-    rows = DCI != "",
-    replacement = "",
-    pattern = "Imipenem \\+ Meropenem|Azithromycin|Vancomycin"
-  )
-gtsave(hospital_tab, filename = "../Paper/Tables/national_hospital.docx")
-gtsave(hospital_tab, filename = "tables/Table2.docx")
-
-
-# ICU consumption
-icu_2019_ref_year = atb_use_hospital_level %>%
-  filter(secteur == "ICU", code %in% icu_cohort_final, atb_class %in% atb_class_names2) %>%
-  mutate(atb_class = factor(atb_class, atb_class_names2)) %>%
-  group_by(atb_class) %>%
-  nest() %>%
-  mutate(
-    p_f = map(data, atbpval, level = "national"),
-    mul_comp = map(data, atbmulcomp, level = "national")
-  ) %>%
-  select(-data) %>%
-  unnest(c(p_f, mul_comp)) %>%
-  ungroup() %>%
-  mutate(
-    comparison = paste0(group1, "vs", group2),
-    conf_int = ifelse( -conf.low > -conf.high,
-                       paste0(-round(estimate, 1), " (", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
-                       paste0(-round(estimate, 1), " (", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
-    ),
-    p.adj.bis = round(p.adj, 3),
-    p.adj = ifelse(p.adj < 0.001, "<0.001", round(p.adj, 3)),
-    p_f = ifelse(p_f < 0.001, "<0.001", round(p_f, 3))
-  ) %>%
-  select(atb_class, p_f, comparison, conf_int, p.adj, p.adj.bis) %>%
-  pivot_wider(names_from = comparison, values_from = c(conf_int, p.adj, p.adj.bis)) %>%
-  arrange(atb_class) %>%
-  mutate(atb_class = as.character(atb_class)) %>%
-  mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
-         .after = 1)
-
-# ICU
-icu_tab = icu_2019_ref_year %>%
-  gt(.) %>%
-  cols_hide(columns = c(p.adj.bis_2019vs2020, p.adj.bis_2019vs2021, p.adj.bis_2019vs2022)) %>%
-  tab_spanner(
-    label = "2019 vs 2020",
-    columns = c(conf_int_2019vs2020, `p.adj_2019vs2020`)
-  ) %>%
-  tab_spanner(
-    label = "2019 vs 2021",
-    columns = c(conf_int_2019vs2021, `p.adj_2019vs2021`)
-  ) %>%
-  tab_spanner(
-    label = "2019 vs 2022",
-    columns = c(conf_int_2019vs2022, `p.adj_2019vs2022`)
-  ) %>%
-  cols_label(
-    p_f = "Friedman test p-value",
-    conf_int_2019vs2020 = "Estimate (98.3% CI)", 
-    `p.adj_2019vs2020` = "p-value",
-    conf_int_2019vs2021 = "Estimate (98.3% CI)", 
-    `p.adj_2019vs2021` = "p-value",
-    conf_int_2019vs2022 = "Estimate (98.3% CI)", 
-    `p.adj_2019vs2022` = "p-value",
-    atb_class = "",
-    DCI = ""
-  ) %>%
-  tab_style(
-    style = list(
-      cell_text(weight = "bold")
-    ),
-    locations = list(
-      cells_body(
-        rows = p.adj.bis_2019vs2020 <= 0.05,
-        columns = conf_int_2019vs2020
+  gtsave(hospital_tab, filename = paste0("../Paper/Tables/national_hospital_", tolower(adjustment), ".docx"))
+  gtsave(hospital_tab, filename = paste0("tables/Table1_", tolower(adjustment), ".docx"))
+  
+  # ICU consumption
+  icu_tab = atb_use_hospital_level %>%
+    filter(secteur == "ICU", code %in% icu_cohort_final, atb_class %in% atb_class_names2) %>%
+    mutate(atb_class = factor(atb_class, atb_class_names2)) %>%
+    group_by(atb_class) %>%
+    nest() %>%
+    mutate(
+      p_f = map(data, atbpval, level = "national"),
+      mul_comp = map(data, atbmulcomp, adjustment = adjustment)
+    ) %>%
+    select(-data) %>%
+    unnest(c(p_f, mul_comp)) %>%
+    ungroup() %>%
+    mutate(
+      comparison = paste0(group1, "vs", group2),
+      conf_int = ifelse( -conf.low > -conf.high,
+                         paste0(-round(estimate, 1), " (", -round(conf.high, 1), ", ", -round(conf.low,1), ")"),
+                         paste0(-round(estimate, 1), " (", -round(conf.low, 1), ", ", -round(conf.high,1), ")")
       ),
-      cells_body(
-        rows = p.adj.bis_2019vs2021 <= 0.05,
-        columns = conf_int_2019vs2021
+      p.adj.bis = round(p.adj, 4),
+      p.adj = ifelse(p.adj < 0.0001, "<0.0001", format(round(p.adj, 4), nsmall = 4)),
+      p_f = ifelse(p_f < 0.0001, "<0.0001", format(round(p_f, 4), nsmall = 4))
+    ) %>%
+    select(atb_class, p_f, comparison, conf_int, p.adj, p.adj.bis) %>%
+    pivot_wider(names_from = comparison, values_from = c(conf_int, p.adj, p.adj.bis)) %>%
+    arrange(atb_class) %>%
+    mutate(atb_class = as.character(atb_class)) %>%
+    mutate(DCI = ifelse(atb_class %in% c("Azithromycin", "Imipenem + Meropenem", "Vancomycin"), atb_class, ""),
+           .after = 1) %>%
+    gt(.) %>%
+    cols_hide(columns = c(p.adj.bis_2019vs2020, p.adj.bis_2019vs2021, p.adj.bis_2019vs2022)) %>%
+    tab_spanner(
+      label = "2019 vs 2020",
+      columns = c(conf_int_2019vs2020, `p.adj_2019vs2020`)
+    ) %>%
+    tab_spanner(
+      label = "2019 vs 2021",
+      columns = c(conf_int_2019vs2021, `p.adj_2019vs2021`)
+    ) %>%
+    tab_spanner(
+      label = "2019 vs 2022",
+      columns = c(conf_int_2019vs2022, `p.adj_2019vs2022`)
+    ) %>%
+    cols_label(
+      p_f = "Friedman test p-value",
+      conf_int_2019vs2020 = adjustment_estimate[adjustment], 
+      `p.adj_2019vs2020` = "p-value",
+      conf_int_2019vs2021 = adjustment_estimate[adjustment],
+      `p.adj_2019vs2021` = "p-value",
+      conf_int_2019vs2022 = adjustment_estimate[adjustment],
+      `p.adj_2019vs2022` = "p-value",
+      atb_class = "",
+      DCI = ""
+    ) %>%
+    tab_style(
+      style = list(
+        cell_text(weight = "bold")
       ),
-      cells_body(
-        rows = p.adj.bis_2019vs2022 <= 0.05,
-        columns = conf_int_2019vs2022
-      ),
-      cells_column_spanners(),
-      cells_column_labels()
-    )
-  ) %>%
-  tab_options(table.font.size = 11) %>%
-  tab_footnote(
-    footnote = "Corresponds to trimethoprim and combinations of sulfanomides",
-    locations = cells_body(rows = atb_class == "Trimethoprim", columns = atb_class)
-  ) %>%
-  tab_footnote(
-    footnote = "Adjusted p-value with Bonferroni correction",
-    locations = cells_column_labels(columns = c(p.adj_2019vs2020, p.adj_2019vs2021, p.adj_2019vs2022))
-  ) %>%
-  sub_values(
-    columns = atb_class,
-    rows = DCI != "",
-    replacement = "",
-    pattern = "Imipenem \\+ Meropenem|Vancomycin|Azithromycin"
-  ) 
-gtsave(icu_tab, filename = "../Paper/Tables/national_icu.docx", vwidth = 1500)
-gtsave(icu_tab, filename = "tables/Table3.docx", vwidth = 1500)
+      locations = list(
+        cells_body(
+          rows = p.adj.bis_2019vs2020 <= 0.05,
+          columns = conf_int_2019vs2020
+        ),
+        cells_body(
+          rows = p.adj.bis_2019vs2021 <= 0.05,
+          columns = conf_int_2019vs2021
+        ),
+        cells_body(
+          rows = p.adj.bis_2019vs2022 <= 0.05,
+          columns = conf_int_2019vs2022
+        ),
+        cells_column_spanners(),
+        cells_column_labels()
+      )
+    ) %>%
+    tab_options(table.font.size = 11) %>%
+    tab_footnote(
+      footnote = adjustment_footnote1[adjustment],
+      locations = cells_column_labels(columns = c(conf_int_2019vs2020, conf_int_2019vs2021, conf_int_2019vs2022))
+    ) %>%
+    tab_footnote(
+      footnote = "Corresponds to trimethoprim and combinations of sulfanomides",
+      locations = cells_body(rows = atb_class == "Trimethoprim", columns = atb_class)
+    ) %>%
+    tab_footnote(
+      footnote = adjustment_footnote3[adjustment],
+      locations = cells_column_labels(columns = c(p.adj_2019vs2020, p.adj_2019vs2021, p.adj_2019vs2022))
+    ) %>%
+    sub_values(
+      columns = atb_class,
+      rows = DCI != "",
+      replacement = "",
+      pattern = "Imipenem \\+ Meropenem|Vancomycin|Azithromycin"
+    ) 
+  gtsave(icu_tab, filename = paste0("../Paper/Tables/national_icu_", tolower(adjustment), ".docx"), vwidth = 1500)
+  gtsave(icu_tab, filename = paste0("tables/Table2_", tolower(adjustment), ".docx"), vwidth = 1500)
+}
 
 ##################################################
-# Plot regional changes - Figure 4
+# Plot regional changes - Figure 2
 ##################################################
 # Changes from 2019 for specific antibiotic classes
 to_add = atb_use_hospital_level %>%
@@ -328,9 +332,10 @@ to_add = atb_use_hospital_level %>%
   mutate(p = factor(case_when(
     p <= 0.05 & p> 0.01 ~ "*",
     p <= 0.01 & p> 0.001 ~ "**",
-    p <= 0.001 ~ "***",
+    p <= 0.001 & p>0.0001 ~ "***",
+    p <= 0.0001 ~ "****",
     .default = NA
-  ), c("*","**","***")
+  ), c("*","**","***", "****")
   ))
 
 france_region = france %>%
@@ -355,7 +360,7 @@ p1 = ggplot() +
     high = "orange", mid = "ivory", low = "deepskyblue4",
     breaks = seq(-0.5, 0.5, 0.25), labels = scales::percent(seq(-0.50, 0.50, 0.25))
     ) +
-  scale_size_manual("Paired Wilcoxon test\np-value", values = c("*" = 1.5, "**" = 2.5, "***" = 4.5)) +#, trans = "log10", range = c(0.5,4)) +
+  scale_size_manual("Paired Wilcoxon test\np-value", values = c("*" = 1.5, "**" = 2.5, "***" = 4.5, "****" = 6.5)) +
   theme_bw() +
   theme(
     legend.title = element_text(size = 10), 
@@ -375,7 +380,6 @@ df = atb_use_hospital_level %>%
 p2 = atbplot(df, "", level = "regional", facet_type = "alphabetical") +
   labs(y = "Annual azithromycin consumption\n(DDD/1,000 bed-days)") +
   theme(plot.title = element_blank(), axis.title.x = element_blank())
-# ggsave("../Paper/Figures/Figure4B.png", p2, height = 7, width = 8)
   
 # Small map of France with abbreviated names of regions
 p3 = france %>%
@@ -388,15 +392,22 @@ p3 = france %>%
         axis.ticks = element_blank(), axis.title = element_blank(),
         plot.margin = unit(c(0, 0, 0, 0), "cm")) 
 
-# Final figure
+# Save subpanels
+ggsave("../Paper/Figures/Figure2A.png", p1, height = 6, width = 8)
+ggsave("plots/final_figures/Figure2A.pdf", p1, height = 6, width = 8)
+
+ggsave("../Paper/Figures/Figure2B.png", ggarrange(p2, p3, ncol = 2, widths = c(1,0.3)), height = 6, width = 8)
+ggsave("plots/final_figures/Figure2B.pdf", ggarrange(p2, p3, ncol = 2, widths = c(1,0.3)), height = 6, width = 8)
+
+# Save final figure
 figure4 = ggarrange(
   p1,
   ggarrange(p2, p3, ncol = 2, widths = c(1,0.3)),
   nrow = 2, heights = c(1,1), labels = c("A", "B")
   )
 figure4
-ggsave("../Paper/Figures/Figure4.png", figure4, height = 12, width = 8)
-ggsave("plots/Figure4.png", figure4, height = 12, width = 8)
+ggsave("../Paper/Figures/Figure2.png", figure4, height = 12, width = 8)
+ggsave("plots/final_figures/Figure2.pdf", figure4, height = 12, width = 8)
 
 ##################################################
 # Supplementary plot of absolute change between 
@@ -407,7 +418,7 @@ p_legend = ggplot() +
   geom_sf(data = france_region) +
   stat_sf_coordinates(data = subset(france_region, !is.na(p)), aes(size = p), fill = "white", col = "black", shape=21) +
   facet_wrap(facets = vars(atb_class), ncol = 4) +
-  scale_size_manual("Paired Wilcoxon test p-value", values = c("*" = 1.5, "**" = 2.5, "***" = 4)) +
+  scale_size_manual("Paired Wilcoxon test p-value", values = c("*" = 1.5, "**" = 2.5, "***" = 4, "****" = 5.5)) +
   theme_bw() +
   theme(legend.title = element_text(size = 9), legend.direction = "horizontal") +
   labs(x = "", y = "", fill = "")
@@ -435,7 +446,7 @@ for (a in seq_along(atb_class_new_names)) {
     scale_fill_gradient2(high = "orange", mid = "ivory", low = "deepskyblue4") +
     scale_size_manual(
       "",
-      values = c("*" = 1, "**" = 2, "***" = 3),
+      values = c("*" = 1, "**" = 2, "***" = 3, "****" = 4),
       guide = "none"
       ) +
     theme_bw() +
@@ -462,60 +473,3 @@ ggsave("../Paper/Supplementary/antibiotic_consumption_regions.png",
        supp_fig, height = 8, width = 10)
 ggsave("plots/antibiotic_use/antibiotic_consumption_regions.png", 
        supp_fig, height = 8, width = 10)
-
-##################################################
-# Table of multiple comparisons at the regional
-# level for all antibiotic classes
-##################################################
-# # Paired Wilcoxon tests for Total consumption
-# total_atb_regional = atb %>%
-#   filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
-#   group_by(code, Date_year, region) %>%
-#   summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop") %>%
-#   arrange(region, code, Date_year) %>%
-#   group_by(region) %>%
-#   wilcox_test(
-#     consumption ~ Date_year,
-#     comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
-#     paired = T, 
-#     p.adjust.method = "bonferroni", 
-#     alternative = "two.sided",
-#     conf.level = 1-0.05/3,
-#     detailed = T
-#   ) %>%
-#   mutate(atb_class = "Total")
-# 
-# # Final table of paired Wilcoxon test results for multiple comparisons 
-# atb %>%
-#   filter(secteur == "Hospital", atb_class != "Anti-MDR GNB") %>%
-#   group_by(code, Date_year, atb_class, region) %>%
-#   summarise(consumption = sum(molDDD)/unique(Nbhosp)*1000, .groups = "drop") %>%
-#   arrange(atb_class, region, code, Date_year) %>%
-#   group_by(atb_class, region) %>%
-#   wilcox_test(
-#     consumption ~ Date_year, 
-#     comparisons = list(c("2019", "2020"), c("2019", "2021"), c("2019", "2022")),
-#     paired = T, 
-#     p.adjust.method = "bonferroni", 
-#     alternative = "two.sided",
-#     conf.level = 1-0.05/3,
-#     detailed = T
-#   ) %>%
-#   bind_rows(., anti_mdr_regional, total_atb_regional) %>%
-#   mutate(
-#     comparison = paste0(group1, "vs", group2),
-#     conf_int = ifelse( -conf.low > -conf.high,
-#                        paste0("(", -round(conf.high, 2), ", ", -round(conf.low,2), ")"),
-#                        paste0("(", -round(conf.low, 2), ", ", -round(conf.high,2), ")")
-#     ),
-#     estimate = -round(estimate, 2),
-#     p.adj = round(p.adj, 4)
-#   ) %>%
-#   select(atb_class, region, comparison, estimate, conf_int, p.adj) %>%
-#   filter(comparison %in% c("2019vs2020", "2019vs2021", "2019vs2022")) %>%
-#   pivot_wider(names_from = comparison, values_from = c(estimate, conf_int, p.adj)) %>%
-#   dplyr::select(atb_class, region, 
-#                 estimate_2019vs2020, conf_int_2019vs2020, p.adj_2019vs2020,
-#                 estimate_2019vs2021, conf_int_2019vs2021, p.adj_2019vs2021,
-#                 estimate_2019vs2022, conf_int_2019vs2022, p.adj_2019vs2022) %>%
-#   write.csv(., "../Paper/Supplementary/antibiotic_consumption_hospitals_regional_heterogeneity.csv", row.names = F)
